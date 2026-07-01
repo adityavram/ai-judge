@@ -5,7 +5,8 @@ import { ProgressPipeline, type PipelineStep } from './components/ProgressPipeli
 import { TranscriptView } from './components/TranscriptView'
 import { FlowView } from './components/FlowView'
 import { JudgeView } from './components/JudgeView'
-import { fetchTranscript, fetchFlow, judgeRound, type Transcript, type FlowSheet, type JudgingResult } from './api/client'
+import { FeedbackButton } from './components/FeedbackButton'
+import { fetchTranscript, fetchFlow, judgeRound, submitFeedback, type Transcript, type FlowSheet, type JudgingResult } from './api/client'
 import './App.css'
 
 function App() {
@@ -14,8 +15,10 @@ function App() {
   const [flow, setFlow] = useState<FlowSheet | null>(null)
   const [judging, setJudging] = useState<JudgingResult | null>(null)
   const [errors, setErrors] = useState<{ step: string; message: string }[]>([])
+  const [lastUrl, setLastUrl] = useState('')
 
   const runPipeline = async (url: string, topic: string) => {
+    setLastUrl(url)
     setPipelineStep('transcript')
     setTranscript(null)
     setFlow(null)
@@ -57,10 +60,15 @@ function App() {
     }
   }
 
+  const handleFeedback = async (message: string, rating: number) => {
+    await submitFeedback(message, rating || undefined, lastUrl || undefined)
+  }
+
   const busy = pipelineStep !== 'idle' && pipelineStep !== 'done' && pipelineStep !== 'error'
 
   return (
     <div className="app">
+      <FeedbackButton onSubmit={handleFeedback} />
       <header className="app-header">
         <h1>AI Judge</h1>
         <p>Enter a debate round URL to get an AI-generated decision</p>

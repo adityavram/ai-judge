@@ -4,6 +4,7 @@ import cors from 'cors'
 import transcriptRouter from './routes/transcript.js'
 import flowRouter from './routes/flow.js'
 import judgeRouter from './routes/judge.js'
+import feedbackRouter from './routes/feedback.js'
 import { rateLimit, requireClientId } from './rateLimit.js'
 
 const app = express()
@@ -21,6 +22,7 @@ app.use('/api/transcript', rateLimit, transcriptRouter)
 // flow + judge endpoints: just validate client ID, don't increment
 app.use('/api/flow', requireClientId, flowRouter)
 app.use('/api/judge', requireClientId, judgeRouter)
+app.use('/api/feedback', feedbackRouter)
 
 app.listen(PORT, () => {
   console.log(`AI Judge server running on http://localhost:${PORT}`)

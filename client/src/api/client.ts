@@ -199,3 +199,20 @@ export async function judgeRound(flow: FlowSheet, topic: string): Promise<Judgin
     throw new Error(`Network error: ${err instanceof Error ? err.message : 'unknown'}`)
   }
 }
+
+export async function submitFeedback(message: string, rating?: number, videoUrl?: string): Promise<void> {
+  try {
+    const res = await fetch(`${API_BASE}/api/feedback`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ message, rating, videoUrl }),
+    })
+    const { ok, status, body } = await handleResponse(res)
+    if (!ok) {
+      throw new Error(errorFromBody(body, status))
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('HTTP')) throw err
+    throw new Error(`Network error: ${err instanceof Error ? err.message : 'unknown'}`)
+  }
+}
