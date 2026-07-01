@@ -18,9 +18,19 @@ export function TranscriptView({ transcript }: TranscriptViewProps) {
         <h2>Transcript</h2>
         <span className="video-id">Video ID: {transcript.videoId}</span>
       </div>
+      <div className="topic-display">
+        <strong>Topic:</strong> {transcript.topic}
+        {transcript.topicInferred && <span className="inferred-badge">inferred</span>}
+      </div>
+      {transcript.segmentationConfidence === 'low' && (
+        <div className="confidence-warning">
+          Detected {transcript.detectedSpeechCount} speech blocks (expected 6 for APDA).
+          Speaker labels may be inaccurate — LLM refinement coming soon.
+        </div>
+      )}
       <div className="transcript-segments">
         {transcript.segments.map((seg, i) => (
-          <div key={i} className={`segment segment-${seg.speaker.toLowerCase()}`}>
+          <div key={i} className={`segment segment-${seg.speaker.includes('Government') ? 'government' : 'opposition'}`}>
             <div className="segment-meta">
               <span className="speaker-badge">{seg.speaker}</span>
               <span className="time-range">

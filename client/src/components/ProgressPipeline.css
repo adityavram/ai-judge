@@ -1,0 +1,97 @@
+.progress-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 540px;
+  margin: 24px auto;
+}
+
+.pipeline-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.pipeline-step.active {
+  background: rgba(30, 58, 138, 0.05);
+}
+
+.pipeline-step.error {
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.step-indicator {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.pipeline-step.done .step-indicator {
+  background: #1e3a8a;
+  border-color: #1e3a8a;
+  color: white;
+}
+
+.pipeline-step.active .step-indicator {
+  border-color: #1e3a8a;
+  background: white;
+}
+
+.pipeline-step.error .step-indicator {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: white;
+}
+
+.step-check { font-size: 14px; }
+.step-x { font-size: 14px; }
+
+.step-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(30, 58, 138, 0.2);
+  border-top-color: #1e3a8a;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.step-info {
+  flex: 1;
+  padding-top: 2px;
+}
+
+.step-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.pipeline-step.pending .step-label {
+  color: var(--text);
+}
+
+.step-desc {
+  font-size: 13px;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.pipeline-step.pending .step-desc {
+  opacity: 0.5;
+}

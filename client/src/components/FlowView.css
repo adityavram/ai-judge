@@ -1,0 +1,108 @@
+.flow-view {
+  width: 100%;
+  text-align: left;
+  overflow-x: auto;
+}
+
+.flow-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.flow-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+}
+
+.flow-table th {
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  border-bottom: 2px solid var(--border);
+  background: var(--code-bg);
+  color: var(--text-h);
+  position: sticky;
+  top: 0;
+}
+
+.flow-table th.speech-col.PMC,
+.flow-table th.speech-col.MG,
+.flow-table th.speech-col.PMR {
+  color: var(--gov);
+}
+
+.flow-table th.speech-col.LOC,
+.flow-table th.speech-col.MO,
+.flow-table th.speech-col.LOR {
+  color: var(--opp);
+}
+
+.clash-col {
+  width: 150px;
+  min-width: 150px;
+}
+
+.speech-col {
+  min-width: 120px;
+}
+
+.flow-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  vertical-align: top;
+  font-size: 13px;
+  line-height: 140%;
+}
+
+.clash-name {
+  font-weight: 600;
+  color: var(--text-h);
+  background: var(--code-bg);
+}
+
+.speech-cell.government {
+  background: var(--gov-bg);
+}
+
+.speech-cell.opposition {
+  background: var(--opp-bg);
+}
+
+.flow-arg {
+  margin-bottom: 10px;
+}
+
+.flow-arg:last-child {
+  margin-bottom: 0;
+}
+
+.arg-tag {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-h);
+  margin-bottom: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.arg-component {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.comp-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  flex-shrink: 0;
+  min-width: 55px;
+}
+
+.comp-text {
+  color: var(--text-h);
+}

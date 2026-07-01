@@ -1,0 +1,240 @@
+.judge-view {
+  width: 100%;
+  text-align: left;
+}
+
+.decision-banner {
+  padding: 20px 24px;
+  border-radius: 10px;
+  border-left: 6px solid var(--border);
+  background: var(--code-bg);
+  margin-bottom: 28px;
+
+  .winner-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .winner-side {
+    font-size: 28px;
+    font-weight: 700;
+    margin-left: 10px;
+  }
+}
+
+.judge-section {
+  margin-bottom: 28px;
+
+  h3 {
+    font-size: 18px;
+    margin: 0 0 10px;
+    color: var(--text-h);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+}
+
+.rfd-text {
+  font-size: 15px;
+  line-height: 170%;
+  color: var(--text-h);
+  white-space: pre-wrap;
+}
+
+.framework {
+  font-size: 14px;
+  color: var(--text);
+  font-style: italic;
+  margin-bottom: 14px;
+}
+
+.key-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.key-issue {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--code-bg);
+
+  .issue-name {
+    font-weight: 600;
+    color: var(--text-h);
+    margin-right: 8px;
+    font-size: 14px;
+  }
+
+  .issue-importance {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  .issue-why {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: var(--text);
+  }
+}
+
+.clash-verdict {
+  padding: 12px 14px;
+  border-radius: 8px;
+  border-left: 3px solid var(--border);
+  margin-bottom: 10px;
+  background: var(--code-bg);
+}
+
+.verdict-government { border-left-color: var(--gov); }
+.verdict-opposition { border-left-color: var(--opp); }
+.verdict-tie { border-left-color: #f59e0b; }
+
+.clash-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+
+  .clash-name { font-weight: 600; color: var(--text-h); font-size: 14px; }
+
+  .clash-winner {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 4px;
+  }
+
+  .winner-government { background: var(--gov-bg); color: var(--gov); }
+  .winner-opposition { background: var(--opp-bg); color: var(--opp); }
+  .winner-tie { background: rgba(245,158,11,0.1); color: #b45309; }
+}
+
+.clash-reasoning {
+  font-size: 13px;
+  color: var(--text-h);
+  margin: 0 0 6px;
+  line-height: 150%;
+}
+
+.key-args {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+
+  .key-arg {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+}
+
+.da-position {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--code-bg);
+  border: 1px dashed var(--border);
+  margin-bottom: 10px;
+
+  .da-label {
+    font-weight: 600;
+    color: var(--text-h);
+    margin-bottom: 5px;
+    font-size: 14px;
+  }
+
+  .da-argument {
+    font-size: 13px;
+    color: var(--text-h);
+    margin: 0 0 5px;
+  }
+
+  .da-why {
+    font-size: 12px;
+    color: var(--text);
+    margin: 0;
+  }
+}
+
+.speaks-table {
+  width: 100%;
+  border-collapse: collapse;
+
+  th {
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+    border-bottom: 2px solid var(--border);
+    background: var(--code-bg);
+    color: var(--text-h);
+  }
+
+  td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-h);
+  }
+}
+
+.speaks-row.side-government { background: var(--gov-bg); }
+.speaks-row.side-opposition { background: var(--opp-bg); }
+
+.score-cell { font-weight: 700; font-size: 15px; }
+.rank-cell { font-weight: 600; }
+.justification-cell { font-size: 12px; color: var(--text); }
+
+.feedback-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.feedback-card {
+  padding: 14px;
+  border-radius: 8px;
+  border-left: 3px solid var(--border);
+
+  h4 {
+    margin: 0 0 10px;
+    font-size: 15px;
+  }
+}
+
+.feedback-government { border-left-color: var(--gov); }
+.feedback-opposition { border-left-color: var(--opp); }
+
+.feedback-section {
+  margin-bottom: 10px;
+
+  strong {
+    font-size: 12px;
+    color: var(--text-h);
+    display: block;
+    margin-bottom: 3px;
+  }
+
+  ul {
+    margin: 0;
+    padding-left: 18px;
+
+    li {
+      font-size: 13px;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+  }
+}
