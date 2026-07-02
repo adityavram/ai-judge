@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { mkdirSync, existsSync } from 'fs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const DB_PATH = process.env.DB_PATH ?? join(__dirname, '..', 'data', 'feedback.db')
@@ -9,6 +10,11 @@ let db: Database.Database | null = null
 
 function getDb(): Database.Database {
   if (!db) {
+    // Ensure the data directory exists
+    const dbDir = dirname(DB_PATH)
+    if (!existsSync(dbDir)) {
+      mkdirSync(dbDir, { recursive: true })
+    }
     db = new Database(DB_PATH)
     db.exec(`
       CREATE TABLE IF NOT EXISTS feedback (
