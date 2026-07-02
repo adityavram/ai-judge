@@ -59,6 +59,7 @@ export interface ClashVerdict {
   winner: 'Government' | 'Opposition' | 'Tie'
   reasoning: string
   keyArgs: string[]
+  newArgs: string[]
 }
 
 export interface DevilsAdvocatePosition {

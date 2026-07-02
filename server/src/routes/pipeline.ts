@@ -175,7 +175,7 @@ async function runPipeline(job: PipelineJob, url: string, topic?: string): Promi
 
     // Step 2: Flow
     job.status = 'flow'
-    console.log(`[pipeline:${job.id}] Generating flow sheet...`)
+    console.log(`[pipeline:${job.id}] Generating flow...`)
     job.flow = await generateFlowSheet(job.transcript.segments)
 
     // Step 3: Judge
@@ -187,7 +187,7 @@ async function runPipeline(job: PipelineJob, url: string, topic?: string): Promi
     console.log(`[pipeline:${job.id}] Complete! Winner: ${job.judging.winner}`)
   } catch (err) {
     const stepLabel = job.status === 'transcript' ? 'Transcript'
-      : job.status === 'flow' ? 'Flow Sheet'
+      : job.status === 'flow' ? 'Flow'
       : 'Judging'
     job.errorStep = stepLabel
 

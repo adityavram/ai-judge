@@ -29,7 +29,7 @@ router.post('/', async (req, res) => {
     }
     console.error('Flow generation error:', err)
     res.status(500).json({
-      error: 'Failed to generate flow sheet',
+      error: 'Failed to generate flow',
       detail: err instanceof Error ? err.message : 'Unknown error',
     })
   }

@@ -10,7 +10,7 @@ const SPEECH_ORDER = ['PMC', 'LOC', 'MG', 'MO', 'LOR', 'PMR']
 export function FlowView({ flow }: FlowViewProps) {
   return (
     <div className="flow-view">
-      <h2>Flow Sheet</h2>
+      <h2>Flow</h2>
       <div className="flow-table-wrapper">
         <table className="flow-table">
           <thead>

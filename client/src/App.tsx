@@ -38,9 +38,9 @@ function friendlyError(state: PipelineState): string {
     if (raw.includes('Could not extract video ID')) return 'That does not look like a valid YouTube URL. Please check and try again.'
     return `Failed to process the video transcript. ${raw}`
   }
-  if (step === 'Flow Sheet') {
+  if (step === 'Flow') {
     if (raw.includes('All speeches failed')) return 'Could not analyze any of the speeches. The video may be too long or the captions too unclear.'
-    return `Failed to generate the flow sheet. ${raw}`
+    return `Failed to generate the flow. ${raw}`
   }
   if (step === 'Judging') {
     return `Failed to judge the round. ${raw}`
@@ -133,15 +133,15 @@ function App() {
           </>
         )}
 
-        {transcript && pipelineStep !== 'idle' && (
-          <Collapsible title="Transcript" badge={`${transcript.segments.length} speeches`} defaultOpen={false}>
-            <TranscriptView transcript={transcript} />
+        {flow && pipelineStep !== 'idle' && (
+          <Collapsible title="Flow" badge={`${flow.clashes.length} clashes`} defaultOpen={false}>
+            <FlowView flow={flow} />
           </Collapsible>
         )}
 
-        {flow && pipelineStep !== 'idle' && (
-          <Collapsible title="Flow Sheet" badge={`${flow.clashes.length} clashes`} defaultOpen={false}>
-            <FlowView flow={flow} />
+        {transcript && pipelineStep !== 'idle' && (
+          <Collapsible title="Transcript" badge={`${transcript.segments.length} speeches`} defaultOpen={false}>
+            <TranscriptView transcript={transcript} />
           </Collapsible>
         )}
       </main>

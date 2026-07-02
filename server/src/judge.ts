@@ -68,6 +68,7 @@ For each clash:
 - Determine the winner (Government, Opposition, or Tie)
 - Explain the reasoning (which args were stronger, what was dropped, which links were conceded)
 - Note the key arguments that decided the clash
+- IMPORTANT: Identify any arguments from PMR or LOR that appear to be NEW (not referenced or foreshadowed in earlier speeches). In APDA, reply speeches may only crystallize and weigh — they may NOT introduce new arguments. Flag suspected new arguments as "newArgs" and discount them heavily in your evaluation.
 
 Use the weighing analysis to prioritize which arguments matter most within each clash.
 
@@ -78,7 +79,8 @@ Respond with ONLY valid JSON:
       "clashName": "Name of the clash",
       "winner": "Government|Opposition|Tie",
       "reasoning": "2-4 sentences explaining who won and why",
-      "keyArgs": ["Short descriptions of the decisive arguments"]
+      "keyArgs": ["Short descriptions of the decisive arguments"],
+      "newArgs": ["Any arguments from PMR/LOR that appear to be new (not foreshadowed in earlier speeches). Empty array if none suspected."]
     }
   ]
 }`
@@ -185,6 +187,13 @@ The provisional winner is ${provisionalWinner}. Multiple devil's advocate positi
 3. References specific clashes, arguments, and weighing from the round
 4. Is concise but thorough (3-5 paragraphs)
 
+IMPORTANT RULES FOR REPLY SPEECHES (PMR and LOR):
+- In APDA, reply speeches may ONLY crystallize, weigh, and summarize. They may NOT introduce new arguments.
+- If the clash verdicts flagged suspected NEW arguments from PMR or LOR (arguments not foreshadowed or referenced in earlier speeches), you MUST explicitly call them out in the RFD.
+- New arguments from reply speeches should be discounted or ignored in your decision — they are not legitimate grounds for winning a clash.
+- When evaluating whether a reply speech argument is "new," consider: was this specific claim, link, or impact introduced in a prior constructive/rebuttal? If the earlier speeches only vaguely alluded to the idea but the reply speech develops it into a full argument, that development is still new.
+- Credit prior speeches for arguments they actually made, but be skeptical of reply speeches claiming credit for arguments that weren't clearly articulated earlier.
+
 Write in the voice of an experienced debate judge giving an oral RFD. Be direct and specific — reference actual arguments from the flow, not vague generalities.`
 
   const user = `Topic: ${topic}
@@ -226,9 +235,18 @@ async function assignSpeaks(
 ): Promise<SpeakerScore[]> {
   const system = `You are an expert APDA debate judge assigning speaker scores and ranks.
 
-Use this APDA Speaker Scale to assign scores:
-
+APDA Speaker Scale Reference:
 ${speaksGuide}
+
+PRACTICAL CALIBRATION — The written scale is aspirational. In real APDA practice:
+- 25 is a solid, truly average speech. A competent debater who does everything right but nothing exceptional gets a 25.
+- 22-24 is below average — the debater made noticeable errors or was noticeably weaker.
+- 20-21 is poor — significant errors, major drops, weak argumentation. Below 20 is reserved for genuinely insulting or destructive speeches.
+- 26-28 is above average — strong engagement, good weighing, clear argumentation.
+- 29-32 is excellent — near-decisive warranting, crisp weighing, strong all-around performance.
+- 33+ is exceptional — debate-changing performance, near-perfect execution.
+
+DO NOT give scores below 18 unless the speech was actively harmful or offensive. Most scores should fall between 22 and 30.
 
 Rules:
 - Scores are whole numbers from ~5 to ~45, with 25 being average
@@ -241,6 +259,8 @@ Rules:
   - Member of Opposition (MO) = 1 debater
 - Ranks: 1 (best) to 4 (worst). CRITICAL: ranks MUST be a permutation of {1, 2, 3, 4} — each DEBATER gets a DISTINCT rank, no ties, no gaps, no repeats. A debater's two speeches share the same rank (e.g., if PM is rank 1, both PMC and PMR get rank 1). Determine the debater's rank based on their combined contribution across both speeches.
 - Evaluate each speaker on: warrant quality, impact quality, weighing quality, engagement, and argument quality
+- IMPORTANT: PMR and LOR are reply speeches. They should be evaluated on crystallization, weighing, and voter identification — NOT on new argumentation. If a reply speech introduces new arguments, this is a negative, not a positive. Penalize reply speeches that make new arguments rather than crystallizing existing ones.
+- If any clash verdicts flagged "newArgs" from PMR or LOR, those new arguments should LOWER the reply speaker's score, not raise it.
 
 Evaluate each of the 6 speeches (PMC, LOC, MG, MO, LOR, PMR) based on their contributions in the flow sheet. Each speech gets its own score, but the two speeches by the same debater share a rank.
 

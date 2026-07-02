@@ -9,7 +9,7 @@ interface ProgressPipelineProps {
 
 const STEPS = [
   { key: 'transcript', label: 'Transcript', desc: 'Fetching YouTube captions & segmenting speeches' },
-  { key: 'flow', label: 'Flow Sheet', desc: 'Extracting arguments & building clash structure' },
+  { key: 'flow', label: 'Flow', desc: 'Extracting arguments & building clash structure' },
   { key: 'judge', label: 'Judging', desc: 'Weighing, evaluating clashes, devil\'s advocate, RFD' },
 ] as const
 
