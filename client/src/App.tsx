@@ -6,8 +6,47 @@ import { TranscriptView } from './components/TranscriptView'
 import { FlowView } from './components/FlowView'
 import { JudgeView } from './components/JudgeView'
 import { FeedbackButton } from './components/FeedbackButton'
-import { fetchTranscript, fetchFlow, judgeRound, submitFeedback, type Transcript, type FlowSheet, type JudgingResult } from './api/client'
+import { startPipeline, pollPipeline, submitFeedback, type PipelineState } from './api/client'
+import type { Transcript, FlowSheet, JudgingResult } from './api/client'
 import './App.css'
+
+function friendlyError(state: PipelineState): string {
+  const raw = state.error ?? 'Unknown error'
+
+  if (raw.includes('Daily round limit') || raw.includes('429')) {
+    return "You've reached your daily limit of judged rounds. Please try again tomorrow."
+  }
+  if (raw.includes('daily') && raw.includes('limit') || raw.includes('token_exhausted')) {
+    return 'The AI service has reached its daily usage limit. Please try again tomorrow.'
+  }
+  if (raw.includes('not properly configured') || raw.includes('invalid or not authorized')) {
+    return 'The server is not properly configured. Please contact the administrator.'
+  }
+  if (raw.includes('timed out') || raw.includes('timeout') || raw.includes('504')) {
+    return 'The AI took too long to process this round. Please try again — shorter videos may process faster.'
+  }
+  if (raw.includes('unavailable') || raw.includes('503') || raw.includes('502')) {
+    return 'The AI service is temporarily unavailable. Please try again in a moment.'
+  }
+  if (raw.includes('Network error') || raw.includes('fetch failed')) {
+    return 'Could not reach the server. Please check your connection and try again.'
+  }
+
+  const step = state.errorStep ?? ''
+  if (step === 'Transcript') {
+    if (raw.includes('No transcript')) return 'This video does not have captions/transcript available. Try a different video.'
+    if (raw.includes('Could not extract video ID')) return 'That does not look like a valid YouTube URL. Please check and try again.'
+    return `Failed to process the video transcript. ${raw}`
+  }
+  if (step === 'Flow Sheet') {
+    if (raw.includes('All speeches failed')) return 'Could not analyze any of the speeches. The video may be too long or the captions too unclear.'
+    return `Failed to generate the flow sheet. ${raw}`
+  }
+  if (step === 'Judging') {
+    return `Failed to judge the round. ${raw}`
+  }
+  return raw
+}
 
 function App() {
   const [pipelineStep, setPipelineStep] = useState<PipelineStep>('idle')
@@ -17,49 +56,6 @@ function App() {
   const [errors, setErrors] = useState<{ step: string; message: string }[]>([])
   const [lastUrl, setLastUrl] = useState('')
 
-  function friendlyError(step: string, err: unknown): string {
-    const raw = err instanceof Error ? err.message : 'unknown'
-
-    // Network errors
-    if (raw.includes('Network error') || raw.includes('fetch failed')) {
-      return 'Could not reach the server. Please check your connection and try again.'
-    }
-    // Rate limit
-    if (raw.includes('Daily round limit') || raw.includes('429')) {
-      return "You've reached your daily limit of judged rounds. Please try again tomorrow."
-    }
-    // Token exhaustion
-    if (raw.includes('daily') && raw.includes('limit') || raw.includes('token_exhausted')) {
-      return 'The AI service has reached its daily usage limit. Please try again tomorrow.'
-    }
-    // Config errors
-    if (raw.includes('not properly configured') || raw.includes('invalid or not authorized')) {
-      return 'The server is not properly configured. Please contact the administrator.'
-    }
-    // Timeout
-    if (raw.includes('timed out') || raw.includes('timeout') || raw.includes('504')) {
-      return 'The AI took too long to process this round. Please try again — shorter videos may process faster.'
-    }
-    // Provider unavailable
-    if (raw.includes('unavailable') || raw.includes('503') || raw.includes('502')) {
-      return 'The AI service is temporarily unavailable. Please try again in a moment.'
-    }
-    // Step-specific
-    if (step === 'transcript') {
-      if (raw.includes('No transcript')) return 'This video does not have captions/transcript available. Try a different video.'
-      if (raw.includes('Could not extract video ID')) return 'That does not look like a valid YouTube URL. Please check and try again.'
-      return `Failed to process the video transcript. ${raw}`
-    }
-    if (step === 'flow') {
-      if (raw.includes('All speeches failed')) return 'Could not analyze any of the speeches. The video may be too long or the captions too unclear.'
-      return `Failed to generate the flow sheet. ${raw}`
-    }
-    if (step === 'judge') {
-      return `Failed to judge the round. ${raw}`
-    }
-    return raw
-  }
-
   const runPipeline = async (url: string, topic: string) => {
     setLastUrl(url)
     setPipelineStep('transcript')
@@ -68,37 +64,36 @@ function App() {
     setJudging(null)
     setErrors([])
 
-    // Step 1: Transcript
-    let currentTranscript: Transcript
     try {
-      currentTranscript = await fetchTranscript(url, topic)
-      setTranscript(currentTranscript)
-    } catch (err) {
-      setErrors((prev) => [...prev, { step: 'Transcript', message: friendlyError('transcript', err) }])
-      setPipelineStep('error')
-      return
-    }
+      const jobId = await startPipeline(url, topic || undefined)
 
-    // Step 2: Flow
-    setPipelineStep('flow')
-    let currentFlow: FlowSheet
-    try {
-      currentFlow = await fetchFlow(currentTranscript.segments)
-      setFlow(currentFlow)
-    } catch (err) {
-      setErrors((prev) => [...prev, { step: 'Flow Sheet', message: friendlyError('flow', err) }])
-      setPipelineStep('error')
-      return
-    }
+      while (true) {
+        const state = await pollPipeline(jobId)
 
-    // Step 3: Judge
-    setPipelineStep('judge')
-    try {
-      const result = await judgeRound(currentFlow, currentTranscript.topic)
-      setJudging(result)
-      setPipelineStep('done')
+        // Update step indicator
+        if (state.status === 'transcript') setPipelineStep('transcript')
+        else if (state.status === 'flow') setPipelineStep('flow')
+        else if (state.status === 'judge') setPipelineStep('judge')
+        else if (state.status === 'done') {
+          setPipelineStep('done')
+        } else if (state.status === 'error') {
+          setPipelineStep('error')
+        }
+
+        // Show partial results as they arrive
+        if (state.transcript) setTranscript(state.transcript)
+        if (state.flow) setFlow(state.flow)
+        if (state.judging) setJudging(state.judging)
+
+        if (state.status === 'error') {
+          setErrors([{ step: state.errorStep ?? 'Error', message: friendlyError(state) }])
+          return
+        }
+
+        if (state.status === 'done') return
+      }
     } catch (err) {
-      setErrors((prev) => [...prev, { step: 'Judging', message: friendlyError('judge', err) }])
+      setErrors([{ step: 'Pipeline', message: err instanceof Error ? err.message : 'Unknown error' }])
       setPipelineStep('error')
     }
   }

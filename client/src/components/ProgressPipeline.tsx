@@ -22,7 +22,7 @@ export function ProgressPipeline({ currentStep, errors }: ProgressPipelineProps)
       {STEPS.map((step, i) => {
         const stepIdx = order.indexOf(step.key as PipelineStep)
         let status: 'pending' | 'active' | 'done' | 'error' = 'pending'
-        if (currentStep === 'error' && errors.some((e) => e.step === step.key)) {
+        if (currentStep === 'error' && errors.some((e) => e.step === step.label || e.step.toLowerCase() === step.key)) {
           status = 'error'
         } else if (stepIdx < currentIdx) {
           status = 'done'

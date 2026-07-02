@@ -8,6 +8,7 @@ import transcriptRouter from './routes/transcript.js'
 import flowRouter from './routes/flow.js'
 import judgeRouter from './routes/judge.js'
 import feedbackRouter from './routes/feedback.js'
+import pipelineRouter from './routes/pipeline.js'
 import { rateLimit, requireClientId } from './rateLimit.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -23,6 +24,7 @@ app.get('/health', (_req, res) => {
 })
 
 // API routes
+app.use('/api/pipeline', pipelineRouter)
 app.use('/api/transcript', rateLimit, transcriptRouter)
 app.use('/api/flow', requireClientId, flowRouter)
 app.use('/api/judge', requireClientId, judgeRouter)

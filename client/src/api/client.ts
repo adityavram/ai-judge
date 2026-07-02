@@ -113,106 +113,56 @@ export interface JudgingResult {
   oppositionTeam: TeamFeedback
 }
 
-export interface RateLimitInfo {
-  remaining: number
-  limit: number
-  resetAt: string
+export type PipelineStatus = 'transcript' | 'flow' | 'judge' | 'done' | 'error'
+
+export interface PipelineState {
+  id: string
+  status: PipelineStatus
+  transcript: Transcript | null
+  flow: FlowSheet | null
+  judging: JudgingResult | null
+  errorStep: string | null
+  error: string | null
 }
 
-async function handleResponse(res: Response): Promise<{ ok: boolean; status: number; body: unknown }> {
-  const text = await res.text().catch(() => '')
-  let parsed: unknown
-  try { parsed = JSON.parse(text) } catch { parsed = { error: text || `HTTP ${res.status}` } }
-  return { ok: res.ok, status: res.status, body: parsed }
-}
-
-function errorFromBody(body: unknown, status: number): string {
-  if (body && typeof body === 'object' && 'error' in body) {
-    const b = body as { error: string; detail?: string }
-    return b.detail ? `${b.error} — ${b.detail}` : b.error
+export async function startPipeline(url: string, topic?: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/pipeline`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ url, topic }),
+  })
+  if (res.status === 429) throw new Error('Daily round limit reached. Please try again tomorrow.')
+  if (res.status === 400) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(body.error ?? `Validation error: HTTP ${res.status}`)
   }
-  return `HTTP ${status}`
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Failed to start pipeline: HTTP ${res.status} ${text}`)
+  }
+  const data = await res.json() as { id: string; status: string }
+  return data.id
 }
 
-export async function fetchTranscript(url: string, topic?: string): Promise<Transcript> {
-  try {
-    const res = await fetch(`${API_BASE}/api/transcript`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ url, topic }),
-    })
-    const { ok, status, body } = await handleResponse(res)
-    if (!ok) {
-      console.error('[fetchTranscript] HTTP', status, body)
-      if (status === 429) throw new Error('Daily round limit reached. Please try again tomorrow.')
-      throw new Error(errorFromBody(body, status))
-    }
-    return body as Transcript
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('HTTP')) throw err
-    if (err instanceof Error && err.message.includes('Daily round')) throw err
-    console.error('[fetchTranscript] Network error:', err)
-    throw new Error(`Network error: ${err instanceof Error ? err.message : 'unknown'}`)
+export async function pollPipeline(jobId: string): Promise<PipelineState> {
+  const res = await fetch(`${API_BASE}/api/pipeline/${jobId}`, {
+    headers: authHeaders(),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`Failed to poll pipeline: HTTP ${res.status} ${text}`)
   }
-}
-
-export async function fetchFlow(segments: SpeakerSegment[]): Promise<FlowSheet> {
-  try {
-    const res = await fetch(`${API_BASE}/api/flow`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ segments }),
-    })
-    const { ok, status, body } = await handleResponse(res)
-    if (!ok) {
-      console.error('[fetchFlow] HTTP', status, body)
-      if (status === 429) throw new Error('Daily round limit reached. Please try again tomorrow.')
-      throw new Error(errorFromBody(body, status))
-    }
-    return body as FlowSheet
-  } catch (err) {
-    if (err instanceof Error && (err.message.includes('HTTP') || err.message.includes('Daily round'))) throw err
-    console.error('[fetchFlow] Network error:', err)
-    throw new Error(`Network error: ${err instanceof Error ? err.message : 'unknown'}`)
-  }
-}
-
-export async function judgeRound(flow: FlowSheet, topic: string): Promise<JudgingResult> {
-  try {
-    console.log('[judgeRound] Sending request:', { clashes: flow.clashes.length, topic })
-    const res = await fetch(`${API_BASE}/api/judge`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ flow, topic }),
-    })
-    const { ok, status, body } = await handleResponse(res)
-    if (!ok) {
-      console.error('[judgeRound] HTTP', status, body)
-      if (status === 429) throw new Error('Daily round limit reached. Please try again tomorrow.')
-      throw new Error(errorFromBody(body, status))
-    }
-    console.log('[judgeRound] Success:', { winner: (body as JudgingResult).winner })
-    return body as JudgingResult
-  } catch (err) {
-    if (err instanceof Error && (err.message.includes('HTTP') || err.message.includes('Daily round'))) throw err
-    console.error('[judgeRound] Network error:', err)
-    throw new Error(`Network error: ${err instanceof Error ? err.message : 'unknown'}`)
-  }
+  return res.json() as Promise<PipelineState>
 }
 
 export async function submitFeedback(message: string, rating?: number, videoUrl?: string): Promise<void> {
-  try {
-    const res = await fetch(`${API_BASE}/api/feedback`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ message, rating, videoUrl }),
-    })
-    const { ok, status, body } = await handleResponse(res)
-    if (!ok) {
-      throw new Error(errorFromBody(body, status))
-    }
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('HTTP')) throw err
-    throw new Error(`Network error: ${err instanceof Error ? err.message : 'unknown'}`)
+  const res = await fetch(`${API_BASE}/api/feedback`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ message, rating, videoUrl }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    throw new Error(typeof body === 'object' && body.error ? body.error : `HTTP ${res.status}`)
   }
 }
