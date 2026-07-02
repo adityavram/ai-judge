@@ -6,6 +6,7 @@ import { generateFlowSheet } from '../flow.js'
 import { judgeRound } from '../judge.js'
 import { llmChat, LlmError, llmErrorToResponse } from '../llm.js'
 import { rateLimit, requireClientId } from '../rateLimit.js'
+import { getCachedTranscript, saveTranscriptCache } from '../db.js'
 import type { CaptionSegment, Transcript, FlowSheet, JudgingResult } from '../types.js'
 
 const router = Router()
@@ -110,56 +111,87 @@ async function runPipeline(job: PipelineJob, url: string, topic?: string): Promi
       return
     }
 
-    const rawCaptions = await fetchTranscriptWithRetry(videoId)
-
-    const captionSegments: CaptionSegment[] = rawCaptions.map((c) => ({
-      text: c.text,
-      start: c.offset / 1000,
-      duration: c.duration / 1000,
-    }))
-
-    let resolvedTopic = topic?.trim() ?? ''
-    let topicInferred = false
-
-    const { segments, confidence, detectedSpeechCount } = await assignSpeakers(captionSegments, resolvedTopic || undefined)
-
-    if (!resolvedTopic) {
-      try {
-        console.log(`[pipeline:${job.id}] Inferring topic...`)
-        const pmc = segments.find((s) => s.speaker.startsWith('PMC'))
-        const pmcText = pmc?.text ?? segments[0]?.text ?? captionSegments.map((c) => c.text).join(' ')
-        resolvedTopic = await inferTopic(pmcText)
-        topicInferred = true
-        console.log(`[pipeline:${job.id}] Inferred topic: ${resolvedTopic}`)
-
-        if (segments.length > 1) {
-          const { segments: revalidated } = await assignSpeakers(captionSegments, resolvedTopic)
-          if (revalidated.length === segments.length) {
-            revalidated.forEach((seg, i) => {
-              if (segments[i]) segments[i].speaker = seg.speaker
-            })
-          }
-        }
-      } catch (err) {
-        if (err instanceof LlmError && (err.kind === 'token_exhausted' || err.kind === 'config')) {
-          job.status = 'error'
-          job.errorStep = 'Transcript'
-          job.error = llmErrorToResponse(err).error
-          return
-        }
-        console.warn(`[pipeline:${job.id}] Topic inference failed, continuing without topic`)
-        resolvedTopic = 'Unknown'
+    // Check cache first
+    const cached = getCachedTranscript(videoId)
+    if (cached) {
+      console.log(`[pipeline:${job.id}] Cache hit for video ${videoId}`)
+      job.transcript = {
+        videoId: cached.video_id,
+        rawSegments: JSON.parse(cached.raw_segments),
+        segments: JSON.parse(cached.segments),
+        segmentationConfidence: cached.confidence as 'high' | 'low',
+        detectedSpeechCount: cached.detected_speech_count,
+        topic: cached.topic,
+        topicInferred: cached.topic_inferred === 1,
       }
-    }
+    } else {
+      const rawCaptions = await fetchTranscriptWithRetry(videoId)
 
-    job.transcript = {
-      videoId,
-      rawSegments: captionSegments,
-      segments,
-      segmentationConfidence: confidence,
-      detectedSpeechCount,
-      topic: resolvedTopic || 'Unknown',
-      topicInferred,
+      const captionSegments: CaptionSegment[] = rawCaptions.map((c) => ({
+        text: c.text,
+        start: c.offset / 1000,
+        duration: c.duration / 1000,
+      }))
+
+      let resolvedTopic = topic?.trim() ?? ''
+      let topicInferred = false
+
+      const { segments, confidence, detectedSpeechCount } = await assignSpeakers(captionSegments, resolvedTopic || undefined)
+
+      if (!resolvedTopic) {
+        try {
+          console.log(`[pipeline:${job.id}] Inferring topic...`)
+          const pmc = segments.find((s) => s.speaker.startsWith('PMC'))
+          const pmcText = pmc?.text ?? segments[0]?.text ?? captionSegments.map((c) => c.text).join(' ')
+          resolvedTopic = await inferTopic(pmcText)
+          topicInferred = true
+          console.log(`[pipeline:${job.id}] Inferred topic: ${resolvedTopic}`)
+
+          if (segments.length > 1) {
+            const { segments: revalidated } = await assignSpeakers(captionSegments, resolvedTopic)
+            if (revalidated.length === segments.length) {
+              revalidated.forEach((seg, i) => {
+                if (segments[i]) segments[i].speaker = seg.speaker
+              })
+            }
+          }
+        } catch (err) {
+          if (err instanceof LlmError && (err.kind === 'token_exhausted' || err.kind === 'config')) {
+            job.status = 'error'
+            job.errorStep = 'Transcript'
+            job.error = llmErrorToResponse(err).error
+            return
+          }
+          console.warn(`[pipeline:${job.id}] Topic inference failed, continuing without topic`)
+          resolvedTopic = 'Unknown'
+        }
+      }
+
+      job.transcript = {
+        videoId,
+        rawSegments: captionSegments,
+        segments,
+        segmentationConfidence: confidence,
+        detectedSpeechCount,
+        topic: resolvedTopic || 'Unknown',
+        topicInferred,
+      }
+
+      // Save to cache (best-effort, don't fail pipeline if cache write fails)
+      try {
+        saveTranscriptCache(
+          videoId,
+          JSON.stringify(job.transcript.rawSegments),
+          JSON.stringify(job.transcript.segments),
+          job.transcript.segmentationConfidence,
+          job.transcript.detectedSpeechCount,
+          job.transcript.topic,
+          job.transcript.topicInferred,
+        )
+        console.log(`[pipeline:${job.id}] Cached transcript for video ${videoId}`)
+      } catch (cacheErr) {
+        console.warn(`[pipeline:${job.id}] Failed to cache transcript:`, cacheErr instanceof Error ? cacheErr.message : cacheErr)
+      }
     }
 
     // Step 2: Flow

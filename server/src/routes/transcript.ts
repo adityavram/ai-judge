@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { YoutubeTranscript } from 'youtube-transcript'
 import { extractVideoId, assignSpeakers } from '../diarization.js'
 import { llmChat, LlmError, llmErrorToResponse } from '../llm.js'
+import { getCachedTranscript, saveTranscriptCache } from '../db.js'
 import type { CaptionSegment, Transcript } from '../types.js'
 
 const router = Router()
@@ -54,6 +55,22 @@ router.post('/', async (req, res) => {
   }
 
   try {
+    // Check cache first
+    const cached = getCachedTranscript(videoId)
+    if (cached) {
+      console.log(`[transcript] Cache hit for video ${videoId}`)
+      const transcript: Transcript = {
+        videoId: cached.video_id,
+        rawSegments: JSON.parse(cached.raw_segments),
+        segments: JSON.parse(cached.segments),
+        segmentationConfidence: cached.confidence as 'high' | 'low',
+        detectedSpeechCount: cached.detected_speech_count,
+        topic: cached.topic,
+        topicInferred: cached.topic_inferred === 1,
+      }
+      return res.json(transcript)
+    }
+
     // Fetch YouTube transcript with retry on captcha/rate-limit
     let rawCaptions: Awaited<ReturnType<typeof YoutubeTranscript.fetchTranscript>> | null = null
     for (let attempt = 0; attempt <= YT_MAX_RETRIES; attempt++) {
@@ -132,6 +149,22 @@ router.post('/', async (req, res) => {
       detectedSpeechCount,
       topic: resolvedTopic || 'Unknown',
       topicInferred,
+    }
+
+    // Save to cache (best-effort)
+    try {
+      saveTranscriptCache(
+        videoId,
+        JSON.stringify(transcript.rawSegments),
+        JSON.stringify(transcript.segments),
+        transcript.segmentationConfidence,
+        transcript.detectedSpeechCount,
+        transcript.topic,
+        transcript.topicInferred,
+      )
+      console.log(`[transcript] Cached transcript for video ${videoId}`)
+    } catch (cacheErr) {
+      console.warn('[transcript] Failed to cache transcript:', cacheErr instanceof Error ? cacheErr.message : cacheErr)
     }
 
     res.json(transcript)
