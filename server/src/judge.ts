@@ -238,10 +238,15 @@ Rules:
 - Scores are whole numbers from ~5 to ~45, with 25 being average
 - Choose the LOWEST category the speech falls into (limited by weakest criterion)
 - No "low-point wins" — the losing team's total speaks must be equal or lower than the winning team's total
-- Ranks: 1 (best) to 4 (worst). CRITICAL: ranks MUST be a permutation of {1, 2, 3, 4} — each speaker gets a DISTINCT rank, no ties, no gaps, no repeats. Exactly one speaker is rank 1, one is rank 2, one is rank 3, one is rank 4. The best speaker is 1, the worst is 4. Assign ranks based on overall contribution to winning the round.
+- There are 4 debaters who each give 2 speeches. Score each of the 6 speeches individually, but assign RANKS to the 4 DEBATERS (not speeches):
+  - Prime Minister (PMC + PMR) = 1 debater
+  - Leader of Opposition (LOC + LOR) = 1 debater
+  - Member of Government (MG) = 1 debater
+  - Member of Opposition (MO) = 1 debater
+- Ranks: 1 (best) to 4 (worst). CRITICAL: ranks MUST be a permutation of {1, 2, 3, 4} — each DEBATER gets a DISTINCT rank, no ties, no gaps, no repeats. A debater's two speeches share the same rank (e.g., if PM is rank 1, both PMC and PMR get rank 1). Determine the debater's rank based on their combined contribution across both speeches.
 - Evaluate each speaker on: warrant quality, impact quality, weighing quality, engagement, and argument quality
 
-Evaluate each of the 6 speeches (PMC, LOC, MG, MO, LOR, PMR) based on their contributions in the flow sheet.
+Evaluate each of the 6 speeches (PMC, LOC, MG, MO, LOR, PMR) based on their contributions in the flow sheet. Each speech gets its own score, but the two speeches by the same debater share a rank.
 
 Respond with ONLY valid JSON:
 {
@@ -291,17 +296,51 @@ ${flowToText(flow)}`
 }
 
 function fixupRanks(scores: SpeakerScore[]): SpeakerScore[] {
-  if (scores.length !== 4) return scores
-  const ranks = scores.map((s) => s.rank).sort((a, b) => a - b)
-  const expected = [1, 2, 3, 4]
-  const isCorrect = ranks.every((r, i) => r === expected[i])
-  if (isCorrect) return scores
+  if (scores.length !== 6) return scores
 
-  // Fix: sort by score descending (higher score = better rank), assign 1-4
-  console.warn(`[judge] Fixing invalid ranks: ${ranks.join(',')} → reassigning by score`)
-  const sorted = [...scores].sort((a, b) => b.score - a.score)
-  sorted.forEach((s, i) => { s.rank = i + 1 })
-  return sorted
+  // Map speeches to debaters: PMC+PMR = PM, LOC+LOR = LO, MG = MG, MO = MO
+  const debaterMap: Record<string, string> = {
+    PMC: 'Prime Minister', PMR: 'Prime Minister',
+    LOC: 'Leader of Opposition', LOR: 'Leader of Opposition',
+    MG: 'Member of Government',
+    MO: 'Member of Opposition',
+  }
+
+  // Get the 4 debaters and their best score (use max of their two speeches)
+  const debaterBestScore = new Map<string, number>()
+  for (const s of scores) {
+    const debater = debaterMap[s.speech] ?? s.speaker
+    const current = debaterBestScore.get(debater) ?? -1
+    debaterBestScore.set(debater, Math.max(current, s.score))
+  }
+
+  // Check if ranks are already valid (4 distinct ranks 1-4 across debaters)
+  const debaterRanks = new Map<string, number>()
+  for (const s of scores) {
+    const debater = debaterMap[s.speech] ?? s.speaker
+    debaterRanks.set(debater, s.rank)
+  }
+  const sortedRanks = [...new Set(debaterRanks.values())].sort((a, b) => a - b)
+  const isValid = sortedRanks.length === 4 && sortedRanks.every((r, i) => r === i + 1)
+
+  if (isValid) return scores
+
+  // Fix: sort debaters by best score descending, assign ranks 1-4
+  console.warn(`[judge] Fixing invalid ranks: ${sortedRanks.join(',')} → reassigning by score`)
+  const sortedDebaters = [...debaterBestScore.entries()].sort((a, b) => b[1] - a[1])
+  const newRanks = new Map<string, number>()
+  sortedDebaters.forEach(([, ], i) => {
+    const debater = sortedDebaters[i][0]
+    newRanks.set(debater, i + 1)
+  })
+
+  // Apply ranks to all speeches
+  for (const s of scores) {
+    const debater = debaterMap[s.speech] ?? s.speaker
+    s.rank = newRanks.get(debater) ?? s.rank
+  }
+
+  return scores
 }
 
 // Step 6: Generate per-team feedback
