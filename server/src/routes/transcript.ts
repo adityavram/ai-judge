@@ -1,22 +1,14 @@
 import { Router } from 'express'
-import { YoutubeTranscript } from 'youtube-transcript'
 import { extractVideoId, assignSpeakers } from '../diarization.js'
 import { llmChat, LlmError, llmErrorToResponse } from '../llm.js'
 import { getCachedTranscript, saveTranscriptCache } from '../db.js'
+import { fetchYouTubeTranscript, YouTubeRateLimitError, YouTubeNoTranscriptError } from '../youtube.js'
 import type { CaptionSegment, Transcript } from '../types.js'
 
 const router = Router()
 
 const MAX_URL_LENGTH = 500
 const MAX_TOPIC_LENGTH = 300
-
-const YT_RETRY_DELAY_MS = 5000
-const YT_MAX_RETRIES = 2
-
-function isYoutubeCaptchaError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false
-  return /captcha|too many requests|rate.limit/i.test(err.message)
-}
 
 async function inferTopic(text: string): Promise<string> {
   const sampleText = text.slice(0, 3000)
@@ -71,32 +63,27 @@ router.post('/', async (req, res) => {
       return res.json(transcript)
     }
 
-    // Fetch YouTube transcript with retry on captcha/rate-limit
-    let rawCaptions: Awaited<ReturnType<typeof YoutubeTranscript.fetchTranscript>> | null = null
-    for (let attempt = 0; attempt <= YT_MAX_RETRIES; attempt++) {
-      try {
-        rawCaptions = await YoutubeTranscript.fetchTranscript(videoId)
-        break
-      } catch (err) {
-        if (isYoutubeCaptchaError(err) && attempt < YT_MAX_RETRIES) {
-          console.warn(`[transcript] YouTube captcha/rate-limit on attempt ${attempt + 1}, retrying...`)
-          await new Promise((r) => setTimeout(r, YT_RETRY_DELAY_MS * (attempt + 1)))
-          continue
-        }
-        if (isYoutubeCaptchaError(err)) {
-          return res.status(503).json({
-            error: 'YouTube is temporarily rate-limiting our server. Please try again in a few minutes.',
-          })
-        }
-        throw err
+    // Fetch YouTube transcript via InnerTube (no HTML scraping = no captchas)
+    let captionData: { text: string; offset: number; duration: number }[]
+    try {
+      captionData = await fetchYouTubeTranscript(videoId)
+    } catch (err) {
+      if (err instanceof YouTubeRateLimitError) {
+        return res.status(503).json({
+          error: 'YouTube is temporarily rate-limiting our server. Please try again in a few minutes.',
+        })
       }
+      if (err instanceof YouTubeNoTranscriptError) {
+        return res.status(404).json({ error: err.message })
+      }
+      throw err
     }
 
-    if (!rawCaptions || rawCaptions.length === 0) {
+    if (!captionData || captionData.length === 0) {
       return res.status(404).json({ error: 'No transcript available for this video' })
     }
 
-    const captionSegments: CaptionSegment[] = rawCaptions.map((c) => ({
+    const captionSegments: CaptionSegment[] = captionData.map((c) => ({
       text: c.text,
       start: c.offset / 1000,
       duration: c.duration / 1000,
