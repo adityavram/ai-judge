@@ -238,7 +238,7 @@ Rules:
 - Scores are whole numbers from ~5 to ~45, with 25 being average
 - Choose the LOWEST category the speech falls into (limited by weakest criterion)
 - No "low-point wins" — the losing team's total speaks must be equal or lower than the winning team's total
-- Ranks: 1 (best) to 4 (worst), one per speaker, no ties
+- Ranks: 1 (best) to 4 (worst). CRITICAL: ranks MUST be a permutation of {1, 2, 3, 4} — each speaker gets a DISTINCT rank, no ties, no gaps, no repeats. Exactly one speaker is rank 1, one is rank 2, one is rank 3, one is rank 4. The best speaker is 1, the worst is 4. Assign ranks based on overall contribution to winning the round.
 - Evaluate each speaker on: warrant quality, impact quality, weighing quality, engagement, and argument quality
 
 Evaluate each of the 6 speeches (PMC, LOC, MG, MO, LOR, PMR) based on their contributions in the flow sheet.
@@ -285,8 +285,23 @@ ${flowToText(flow)}`
   })
 
   const parsed = JSON.parse(response.content) as { scores: SpeakerScore[] }
-  console.log(`[judge] Step 5: Assigned speaks: ${parsed.scores.map((s) => `${s.speech}=${s.score}(${s.rank})`).join(', ')}`)
-  return parsed.scores
+  const scores = fixupRanks(parsed.scores)
+  console.log(`[judge] Step 5: Assigned speaks: ${scores.map((s) => `${s.speech}=${s.score}(${s.rank})`).join(', ')}`)
+  return scores
+}
+
+function fixupRanks(scores: SpeakerScore[]): SpeakerScore[] {
+  if (scores.length !== 4) return scores
+  const ranks = scores.map((s) => s.rank).sort((a, b) => a - b)
+  const expected = [1, 2, 3, 4]
+  const isCorrect = ranks.every((r, i) => r === expected[i])
+  if (isCorrect) return scores
+
+  // Fix: sort by score descending (higher score = better rank), assign 1-4
+  console.warn(`[judge] Fixing invalid ranks: ${ranks.join(',')} → reassigning by score`)
+  const sorted = [...scores].sort((a, b) => b.score - a.score)
+  sorted.forEach((s, i) => { s.rank = i + 1 })
+  return sorted
 }
 
 // Step 6: Generate per-team feedback
