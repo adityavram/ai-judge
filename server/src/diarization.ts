@@ -1,5 +1,5 @@
 import type { CaptionSegment, SpeakerSegment } from './types.js'
-import { llmChat, LlmError } from './llm.js'
+import { llmJSON, LlmError } from './llm.js'
 
 const APDA_EXPECTED_SPEECHES = 6
 
@@ -206,7 +206,7 @@ Respond with ONLY valid JSON:
 
 ${previews.join('\n\n')}`
 
-  const response = await llmChat({
+  const parsed = await llmJSON({
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
@@ -214,9 +214,7 @@ ${previews.join('\n\n')}`
     format: 'json',
     temperature: 0.1,
     label: 'diarization:validate-roles',
-  })
-
-  const parsed = JSON.parse(response.content) as { labels: string[] }
+  }) as { labels: string[] }
   return parsed.labels
 }
 

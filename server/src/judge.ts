@@ -1,5 +1,5 @@
 import type { FlowSheet, JudgingResult, WeighingAnalysis, ClashVerdict, DevilsAdvocatePosition, SpeakerScore, TeamFeedback } from './types.js'
-import { llmChat } from './llm.js'
+import { llmChat, llmJSON } from './llm.js'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
@@ -46,7 +46,7 @@ Respond with ONLY valid JSON:
 Flow sheet:
 ${flowToText(flow)}`
 
-  const response = await llmChat({
+  const weighing = await llmJSON({
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
@@ -54,10 +54,10 @@ ${flowToText(flow)}`
     format: 'json',
     temperature: 0.2,
     label: 'judge:weighing',
-  })
+  }) as WeighingAnalysis
 
   console.log('[judge] Step 1: Weighing analysis complete')
-  return JSON.parse(response.content) as WeighingAnalysis
+  return weighing
 }
 
 // Step 2: Clash evaluation based on weighing
@@ -91,7 +91,7 @@ ${JSON.stringify(weighing, null, 2)}
 Flow sheet:
 ${flowToText(flow)}`
 
-  const response = await llmChat({
+  const parsed = await llmJSON({
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
@@ -99,9 +99,7 @@ ${flowToText(flow)}`
     format: 'json',
     temperature: 0.2,
     label: 'judge:clashes',
-  })
-
-  const parsed = JSON.parse(response.content) as { clashVerdicts: ClashVerdict[] }
+  }) as { clashVerdicts: ClashVerdict[] }
   console.log(`[judge] Step 2: Evaluated ${parsed.clashVerdicts.length} clashes`)
   return parsed.clashVerdicts
 }
@@ -156,7 +154,7 @@ ${JSON.stringify(clashVerdicts, null, 2)}
 Flow sheet:
 ${flowToText(flow)}`
 
-  const response = await llmChat({
+  const parsed = await llmJSON({
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
@@ -164,9 +162,7 @@ ${flowToText(flow)}`
     format: 'json',
     temperature: 0.3,
     label: 'judge:devils-advocate',
-  })
-
-  const parsed = JSON.parse(response.content) as { positions: DevilsAdvocatePosition[] }
+  }) as { positions: DevilsAdvocatePosition[] }
   console.log(`[judge] Step 3: Generated ${parsed.positions.length} devil's advocate positions for ${losingSide}`)
   return parsed.positions
 }
@@ -279,7 +275,7 @@ ${JSON.stringify(clashVerdicts, null, 2)}
 Flow sheet:
 ${flowToText(flow)}`
 
-  const response = await llmChat({
+  const parsed = await llmJSON({
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
@@ -287,9 +283,7 @@ ${flowToText(flow)}`
     format: 'json',
     temperature: 0.2,
     label: 'judge:speaks',
-  })
-
-  const parsed = JSON.parse(response.content) as { scores: SpeakerScore[] }
+  }) as { scores: SpeakerScore[] }
   const scores = fixupRanks(parsed.scores)
   console.log(`[judge] Step 5: Assigned speaks: ${scores.map((s) => `${s.speech}=${s.score}(${s.rank})`).join(', ')}`)
   return scores
@@ -394,7 +388,7 @@ ${oppScores.map((s) => `${s.speech}: ${s.score} (rank ${s.rank})`).join(', ')}
 Flow sheet:
 ${flowToText(flow)}`
 
-  const response = await llmChat({
+  const parsed = await llmJSON({
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
@@ -402,10 +396,10 @@ ${flowToText(flow)}`
     format: 'json',
     temperature: 0.3,
     label: 'judge:feedback',
-  })
+  }) as { governmentTeam: TeamFeedback; oppositionTeam: TeamFeedback }
 
   console.log('[judge] Step 6: Feedback generated')
-  return JSON.parse(response.content) as { governmentTeam: TeamFeedback; oppositionTeam: TeamFeedback }
+  return parsed
 }
 
 export async function judgeRound(flow: FlowSheet, topic: string): Promise<JudgingResult> {

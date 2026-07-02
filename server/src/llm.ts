@@ -217,4 +217,78 @@ export function llmErrorToResponse(err: LlmError): { error: string; detail: stri
   }
 }
 
+export function extractJSON(text: string): string {
+  // Strip markdown code fences
+  let cleaned = text.trim()
+  const fenceMatch = cleaned.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/)
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim()
+  }
+
+  // If it already parses, return as-is
+  try {
+    JSON.parse(cleaned)
+    return cleaned
+  } catch {}
+
+  // Try to find the outermost JSON object
+  const firstBrace = cleaned.indexOf('{')
+  const firstBracket = cleaned.indexOf('[')
+  let start: number
+
+  if (firstBrace === -1 && firstBracket === -1) {
+    return cleaned
+  }
+
+  if (firstBrace === -1) {
+    start = firstBracket
+  } else if (firstBracket === -1) {
+    start = firstBrace
+  } else {
+    start = Math.min(firstBrace, firstBracket)
+  }
+
+  // Find matching close
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i]
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (ch === '\\') {
+      escape = true
+      continue
+    }
+    if (ch === '"') {
+      inString = !inString
+      continue
+    }
+    if (inString) continue
+    if (ch === '{' || ch === '[') depth++
+    else if (ch === '}' || ch === ']') {
+      depth--
+      if (depth === 0) {
+        return cleaned.slice(start, i + 1)
+      }
+    }
+  }
+
+  // Fallback: return from first brace/bracket to end
+  return cleaned.slice(start)
+}
+
+export async function llmJSON(opts: LlmChatOptions): Promise<unknown> {
+  const response = await llmChat({ ...opts, format: 'json' })
+  const extracted = extractJSON(response.content)
+  try {
+    return JSON.parse(extracted)
+  } catch (err) {
+    const preview = extracted.slice(0, 200)
+    throw new Error(`LLM returned invalid JSON: ${err instanceof Error ? err.message : err}. Preview: ${preview}`)
+  }
+}
+
 export { LLM_BASE, LLM_API_KEY, LLM_MODEL }

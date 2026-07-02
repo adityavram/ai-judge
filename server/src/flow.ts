@@ -1,5 +1,5 @@
 import type { SpeakerSegment, FlowSheet } from './types.js'
-import { llmChat, LlmError } from './llm.js'
+import { llmJSON, LlmError } from './llm.js'
 
 interface ExtractedArg {
   tag: string
@@ -67,7 +67,7 @@ Respond with ONLY valid JSON:
 Transcript:
 ${segment.text}`
 
-  const response = await llmChat({
+  const parsed = await llmJSON({
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
@@ -75,9 +75,7 @@ ${segment.text}`
     format: 'json',
     temperature: 0.2,
     label: `flow:extract:${speechLabel}`,
-  })
-
-  const parsed = JSON.parse(response.content) as { args: ExtractedArg[] }
+  }) as { args: ExtractedArg[] }
   return parsed.args.map((a) => ({
     ...a,
     speech: speechLabel,
@@ -135,7 +133,7 @@ ${speechArgs
   .map((sa) => `### ${sa.speech} (${sa.side})\n${sa.args.map((a, i) => `${i + 1}. [${a.tag}] ${a.text}\n${a.components.map((c) => `   - ${c.label}: ${c.text}`).join('\n')}`).join('\n')}`)
   .join('\n\n')}`
 
-  const response = await llmChat({
+  const flowSheet = await llmJSON({
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
@@ -143,9 +141,8 @@ ${speechArgs
     format: 'json',
     temperature: 0.2,
     label: 'flow:cluster',
-  })
-
-  return JSON.parse(response.content) as FlowSheet
+  }) as FlowSheet
+  return flowSheet
 }
 
 export async function generateFlowSheet(segments: SpeakerSegment[]): Promise<FlowSheet> {
