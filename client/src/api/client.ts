@@ -125,6 +125,8 @@ export interface PipelineState {
   error: string | null
 }
 
+const MAX_POLL_RETRIES = 3
+
 export async function startPipeline(url: string, topic?: string): Promise<string> {
   const res = await fetch(`${API_BASE}/api/pipeline`, {
     method: 'POST',
@@ -145,14 +147,57 @@ export async function startPipeline(url: string, topic?: string): Promise<string
 }
 
 export async function pollPipeline(jobId: string): Promise<PipelineState> {
-  const res = await fetch(`${API_BASE}/api/pipeline/${jobId}`, {
-    headers: authHeaders(),
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`Failed to poll pipeline: HTTP ${res.status} ${text}`)
+  for (let attempt = 0; attempt < MAX_POLL_RETRIES; attempt++) {
+    try {
+      const res = await fetch(`${API_BASE}/api/pipeline/${jobId}`, {
+        headers: authHeaders(),
+      })
+      if (res.status === 404) {
+        // Server restarted — job lost
+        return {
+          id: jobId,
+          status: 'error',
+          transcript: null,
+          flow: null,
+          judging: null,
+          errorStep: null,
+          error: 'The server was restarted and your round was lost. Please try again.',
+        }
+      }
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        // Server temporarily unavailable — retry after delay
+        if (attempt < MAX_POLL_RETRIES - 1) {
+          await new Promise((r) => setTimeout(r, (attempt + 1) * 3000))
+          continue
+        }
+        return {
+          id: jobId,
+          status: 'error',
+          transcript: null,
+          flow: null,
+          judging: null,
+          errorStep: null,
+          error: 'The server is temporarily unavailable. Please try again in a moment.',
+        }
+      }
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new Error(`Failed to poll pipeline: HTTP ${res.status} ${text}`)
+      }
+      return res.json() as Promise<PipelineState>
+    } catch (err) {
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        // Network error — retry
+        if (attempt < MAX_POLL_RETRIES - 1) {
+          await new Promise((r) => setTimeout(r, (attempt + 1) * 3000))
+          continue
+        }
+        throw new Error('Could not reach the server. Please check your connection and try again.')
+      }
+      throw err
+    }
   }
-  return res.json() as Promise<PipelineState>
+  throw new Error('Failed to reach server after multiple attempts.')
 }
 
 export async function submitFeedback(message: string, rating?: number, videoUrl?: string): Promise<void> {

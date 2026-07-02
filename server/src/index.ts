@@ -11,6 +11,15 @@ import feedbackRouter from './routes/feedback.js'
 import pipelineRouter from './routes/pipeline.js'
 import { rateLimit, requireClientId } from './rateLimit.js'
 
+// Prevent unhandled rejections from crashing the process
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] Unhandled rejection:', reason)
+})
+process.on('uncaughtException', (err) => {
+  console.error('[server] Uncaught exception:', err)
+  // Don't exit — keep the server running
+})
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const app = express()
