@@ -1,70 +1,67 @@
 /**
- * YouTube transcript fetcher using InnerTube API with rotating client contexts.
+ * YouTube transcript fetcher using InnerTube API.
  *
- * Why not use the `youtube-transcript` npm package?
- * - It falls back to HTML scraping when InnerTube fails
- * - HTML scraping triggers captchas on datacenter IPs
- * - The captcha response is what causes the 503 errors users see
+ * The `youtube-transcript` npm package works via InnerTube but falls back to
+ * HTML scraping when InnerTube fails — and that HTML scraping is what triggers
+ * captchas on datacenter IPs. This implementation uses InnerTube only, with
+ * multiple client contexts as fallbacks, and NEVER scrapes YouTube pages.
  *
- * This implementation:
- * - Only uses InnerTube API (no HTML scraping)
- * - Rotates between ANDROID, IOS, WEB, and TV_EMBEDDED client contexts
- * - Retries with different contexts on failure
- * - Never triggers captcha because it never visits youtube.com/watch pages
+ * InnerTube client contexts are tried in order of reliability:
+ * 1. ANDROID — simplest, most reliable, no JS rendering needed
+ * 2. WEB_EMBEDDED — works for embedded videos, requires API key
+ * 3. IOS — mobile client, good backup
  */
 
-const INNERTUBE_API_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false'
+const INNERTUBE_API_URL = 'https://www.youtube.com/youtubei/v1/player'
+const INNERTUBE_API_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8' // Public YouTube web player key
 
-const CLIENT_CONTEXTS = [
+interface ClientContext {
+  name: string
+  context: Record<string, unknown>
+  userAgent: string
+  useApiKey: boolean
+}
+
+const CLIENT_CONTEXTS: ClientContext[] = [
   {
     name: 'ANDROID',
     context: {
       client: {
         clientName: 'ANDROID',
-        clientVersion: '19.29.37',
-        androidSdkVersion: 30,
+        clientVersion: '20.10.38',
+      },
+    },
+    userAgent: 'com.google.android.youtube/20.10.38 (Linux; U; Android 14)',
+    useApiKey: false,
+  },
+  {
+    name: 'WEB_EMBEDDED',
+    context: {
+      client: {
+        clientName: 'WEB_EMBEDDED_PLAYER',
+        clientVersion: '1.20240726.00.00',
         hl: 'en',
         gl: 'US',
       },
+      thirdParty: {
+        embedUrl: 'https://www.google.com',
+      },
     },
-    userAgent: 'com.google.android.youtube/19.29.37 (Linux; U; Android 14; en_US)',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+    useApiKey: true,
   },
   {
     name: 'IOS',
     context: {
       client: {
         clientName: 'IOS',
-        clientVersion: '19.29.37',
-        deviceModel: 'iPhone16,2',
+        clientVersion: '20.10.38',
         hl: 'en',
         gl: 'US',
       },
     },
-    userAgent: 'com.google.ios.youtube/19.29.37 (iPhone16,2; U; CPU iOS 17_6 like Mac OS X; en_US)',
-  },
-  {
-    name: 'WEB',
-    context: {
-      client: {
-        clientName: 'WEB',
-        clientVersion: '2.20240726.00.00',
-        hl: 'en',
-        gl: 'US',
-      },
-    },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
-  },
-  {
-    name: 'TV_EMBEDDED',
-    context: {
-      client: {
-        clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
-        clientVersion: '2.0',
-        hl: 'en',
-        gl: 'US',
-      },
-    },
-    userAgent: 'Mozilla/5.0 (PlayStation; PlayStation 5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+    userAgent: 'com.google.ios.youtube/20.10.38 (iPhone16,2; U; CPU iOS 18_0 like Mac OS X)',
+    useApiKey: false,
   },
 ]
 
@@ -149,10 +146,14 @@ async function fetchCaptionXml(url: string, userAgent: string): Promise<string> 
 
 async function tryInnerTubeClient(
   videoId: string,
-  client: typeof CLIENT_CONTEXTS[number],
+  client: ClientContext,
   preferredLang?: string,
 ): Promise<TranscriptLine[]> {
-  const resp = await fetch(INNERTUBE_API_URL, {
+  const url = client.useApiKey
+    ? `${INNERTUBE_API_URL}?key=${INNERTUBE_API_KEY}`
+    : INNERTUBE_API_URL
+
+  const resp = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -177,12 +178,13 @@ async function tryInnerTubeClient(
     playabilityStatus?: {
       status?: string
       reason?: string
+      messages?: string[]
     }
   }
 
-  // Check if video is playable
   if (data.playabilityStatus?.status === 'UNPLAYABLE') {
-    throw new Error(`Video unplayable: ${data.playabilityStatus.reason ?? 'unknown'}`)
+    const reason = data.playabilityStatus.reason ?? data.playabilityStatus.messages?.join(', ') ?? 'unknown'
+    throw new Error(`Video unplayable: ${reason}`)
   }
 
   const captionTracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks
@@ -190,14 +192,12 @@ async function tryInnerTubeClient(
     throw new Error('No captions available for this video')
   }
 
-  // Select preferred language track
-  let track = captionTracks[0]
-  if (preferredLang) {
-    const match = captionTracks.find((t) => t.languageCode === preferredLang)
-    if (match) track = match
-  }
+  // Select preferred language track, prefer English, then auto-generated
+  let track = captionTracks.find((t) => t.languageCode === (preferredLang ?? 'en'))
+    ?? captionTracks.find((t) => t.languageCode?.startsWith('en'))
+    ?? captionTracks.find((t) => !(t.name?.simpleText ?? '').includes('auto-generated'))
+    ?? captionTracks[0]
 
-  // Validate URL
   const captionUrl = new URL(track.baseUrl)
   if (!captionUrl.hostname.endsWith('.youtube.com')) {
     throw new Error('Invalid caption URL')
@@ -248,7 +248,6 @@ export async function fetchYouTubeTranscript(
 ): Promise<{ text: string; offset: number; duration: number }[]> {
   const errors: string[] = []
 
-  // Try each client context in order
   for (const client of CLIENT_CONTEXTS) {
     try {
       const lines = await tryInnerTubeClient(videoId, client, preferredLang)
@@ -265,12 +264,10 @@ export async function fetchYouTubeTranscript(
     }
   }
 
-  // All clients failed — check if any was a rate limit
   if (errors.some((e) => /HTTP 429|rate.limit|captcha/i.test(e))) {
     throw new YouTubeRateLimitError()
   }
 
-  // Check if any was "no captions"
   if (errors.every((e) => /No capt/i.test(e))) {
     throw new YouTubeNoTranscriptError(videoId)
   }
