@@ -1,19 +1,20 @@
 /**
- * YouTube transcript fetcher using InnerTube API.
+ * YouTube transcript fetcher using InnerTube API with HTML fallback.
  *
- * The `youtube-transcript` npm package works via InnerTube but falls back to
- * HTML scraping when InnerTube fails — and that HTML scraping is what triggers
- * captchas on datacenter IPs. This implementation uses InnerTube only, with
- * multiple client contexts as fallbacks, and NEVER scrapes YouTube pages.
+ * Strategy:
+ * 1. Try InnerTube API with multiple client contexts (no captcha risk)
+ * 2. If all InnerTube contexts fail, try HTML page scraping as last resort
+ * 3. If HTML scraping returns a captcha page, throw a clear rate-limit error
  *
- * InnerTube client contexts are tried in order of reliability:
- * 1. ANDROID — simplest, most reliable, no JS rendering needed
- * 2. WEB_EMBEDDED — works for embedded videos, requires API key
- * 3. IOS — mobile client, good backup
+ * The original youtube-transcript npm package worked this way, but its
+ * captcha error was too cryptic. We handle it gracefully with retries and
+ * clear messaging.
  */
 
-const INNERTUBE_API_URL = 'https://www.youtube.com/youtubei/v1/player'
-const INNERTUBE_API_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8' // Public YouTube web player key
+const INNERTUBE_API_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false'
+const INNERTUBE_API_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8'
+
+const BROWSER_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36,gzip(gfe)'
 
 interface ClientContext {
   name: string
@@ -47,7 +48,7 @@ const CLIENT_CONTEXTS: ClientContext[] = [
         embedUrl: 'https://www.google.com',
       },
     },
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+    userAgent: BROWSER_USER_AGENT,
     useApiKey: true,
   },
   {
@@ -79,6 +80,7 @@ interface TranscriptLine {
 }
 
 const RE_YOUTUBE = /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/i
+const RE_XML_TRANSCRIPT = /<text start="([^"]*)" dur="([^"]*)">([^<]*)<\/text>/g
 
 function decodeEntities(text: string): string {
   return text
@@ -118,9 +120,9 @@ function parseTranscriptXml(xml: string, lang: string): TranscriptLine[] {
   }
   if (results.length > 0) return results
 
-  // Fall back to classic format: <text start="s" dur="s">content</text>
-  const classicRegex = /<text start="([^"]*)" dur="([^"]*)">([^<]*)<\/text>/g
-  while ((match = classicRegex.exec(xml)) !== null) {
+  // Fall back to classic format
+  RE_XML_TRANSCRIPT.lastIndex = 0
+  while ((match = RE_XML_TRANSCRIPT.exec(xml)) !== null) {
     results.push({
       text: decodeEntities(match[3]),
       offset: parseFloat(match[1]),
@@ -144,13 +146,24 @@ async function fetchCaptionXml(url: string, userAgent: string): Promise<string> 
   return resp.text()
 }
 
+function extractCaptionTracks(data: unknown): CaptionTrack[] | null {
+  const d = data as Record<string, unknown>
+  const captions = d?.captions as Record<string, unknown> | undefined
+  const renderer = captions?.playerCaptionsTracklistRenderer as Record<string, unknown> | undefined
+  const tracks = renderer?.captionTracks
+  if (Array.isArray(tracks) && tracks.length > 0) {
+    return tracks as CaptionTrack[]
+  }
+  return null
+}
+
 async function tryInnerTubeClient(
   videoId: string,
   client: ClientContext,
   preferredLang?: string,
 ): Promise<TranscriptLine[]> {
   const url = client.useApiKey
-    ? `${INNERTUBE_API_URL}?key=${INNERTUBE_API_KEY}`
+    ? `${INNERTUBE_API_URL}&key=${INNERTUBE_API_KEY}`
     : INNERTUBE_API_URL
 
   const resp = await fetch(url, {
@@ -169,30 +182,20 @@ async function tryInnerTubeClient(
     throw new Error(`InnerTube ${client.name} returned HTTP ${resp.status}`)
   }
 
-  const data = await resp.json() as {
-    captions?: {
-      playerCaptionsTracklistRenderer?: {
-        captionTracks?: CaptionTrack[]
-      }
-    }
-    playabilityStatus?: {
-      status?: string
-      reason?: string
-      messages?: string[]
-    }
-  }
+  const data = await resp.json()
 
-  if (data.playabilityStatus?.status === 'UNPLAYABLE') {
-    const reason = data.playabilityStatus.reason ?? data.playabilityStatus.messages?.join(', ') ?? 'unknown'
+  const playability = (data as Record<string, unknown>)?.playabilityStatus as Record<string, unknown> | undefined
+  if (playability?.status === 'UNPLAYABLE') {
+    const reason = (playability?.reason as string) ?? 'unknown'
     throw new Error(`Video unplayable: ${reason}`)
   }
 
-  const captionTracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks
-  if (!Array.isArray(captionTracks) || captionTracks.length === 0) {
+  const captionTracks = extractCaptionTracks(data)
+  if (!captionTracks) {
     throw new Error('No captions available for this video')
   }
 
-  // Select preferred language track, prefer English, then auto-generated
+  // Select track: prefer specified lang, then English, then non-auto-generated, then first
   let track = captionTracks.find((t) => t.languageCode === (preferredLang ?? 'en'))
     ?? captionTracks.find((t) => t.languageCode?.startsWith('en'))
     ?? captionTracks.find((t) => !(t.name?.simpleText ?? '').includes('auto-generated'))
@@ -204,6 +207,77 @@ async function tryInnerTubeClient(
   }
 
   const xml = await fetchCaptionXml(track.baseUrl, client.userAgent)
+  const lines = parseTranscriptXml(xml, preferredLang ?? track.languageCode ?? 'en')
+
+  if (lines.length === 0) {
+    throw new Error('Transcript XML was empty')
+  }
+
+  return lines
+}
+
+/**
+ * Fallback: fetch transcript by scraping the YouTube watch page.
+ * This can trigger captchas on datacenter IPs, so we detect them carefully.
+ */
+async function tryWebPageScrape(videoId: string, preferredLang?: string): Promise<TranscriptLine[]> {
+  const resp = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+    headers: {
+      'User-Agent': BROWSER_USER_AGENT,
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+  })
+
+  if (!resp.ok) {
+    throw new Error(`YouTube watch page returned HTTP ${resp.status}`)
+  }
+
+  const html = await resp.text()
+
+  // Detect captcha
+  if (html.includes('class="g-recaptcha"') || html.includes('captcha')) {
+    throw new YouTubeRateLimitError()
+  }
+
+  // Parse ytInitialPlayerResponse from inline script
+  const startToken = 'var ytInitialPlayerResponse = '
+  const startIndex = html.indexOf(startToken)
+  if (startIndex === -1) {
+    throw new Error('Could not find player data in YouTube page')
+  }
+
+  const jsonStart = startIndex + startToken.length
+  let depth = 0
+  let jsonEnd = jsonStart
+  for (let i = jsonStart; i < html.length; i++) {
+    if (html[i] === '{') depth++
+    else if (html[i] === '}') {
+      depth--
+      if (depth === 0) {
+        jsonEnd = i + 1
+        break
+      }
+    }
+  }
+
+  let playerData: Record<string, unknown>
+  try {
+    playerData = JSON.parse(html.slice(jsonStart, jsonEnd))
+  } catch {
+    throw new Error('Could not parse player data from YouTube page')
+  }
+
+  const captionTracks = extractCaptionTracks(playerData)
+  if (!captionTracks) {
+    throw new Error('No captions available for this video')
+  }
+
+  let track = captionTracks.find((t) => t.languageCode === (preferredLang ?? 'en'))
+    ?? captionTracks.find((t) => t.languageCode?.startsWith('en'))
+    ?? captionTracks.find((t) => !(t.name?.simpleText ?? '').includes('auto-generated'))
+    ?? captionTracks[0]
+
+  const xml = await fetchCaptionXml(track.baseUrl, BROWSER_USER_AGENT)
   const lines = parseTranscriptXml(xml, preferredLang ?? track.languageCode ?? 'en')
 
   if (lines.length === 0) {
@@ -239,8 +313,10 @@ export function extractVideoId(urlOrId: string): string | null {
 }
 
 /**
- * Fetch YouTube transcript using InnerTube API with rotating client contexts.
- * Never falls back to HTML scraping (which triggers captchas on datacenter IPs).
+ * Fetch YouTube transcript.
+ * 1. Try InnerTube API with multiple client contexts (no captcha risk)
+ * 2. If all fail, try HTML page scraping as last resort (may trigger captcha)
+ * 3. Cache prevents most repeat fetches
  */
 export async function fetchYouTubeTranscript(
   videoId: string,
@@ -248,10 +324,11 @@ export async function fetchYouTubeTranscript(
 ): Promise<{ text: string; offset: number; duration: number }[]> {
   const errors: string[] = []
 
+  // Try each InnerTube client context
   for (const client of CLIENT_CONTEXTS) {
     try {
       const lines = await tryInnerTubeClient(videoId, client, preferredLang)
-      console.log(`[youtube] Fetched transcript via ${client.name} (${lines.length} lines)`)
+      console.log(`[youtube] Fetched transcript via InnerTube ${client.name} (${lines.length} lines)`)
       return lines.map((l) => ({
         text: l.text,
         offset: l.offset,
@@ -259,12 +336,29 @@ export async function fetchYouTubeTranscript(
       }))
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.warn(`[youtube] ${client.name} failed: ${msg}`)
-      errors.push(`${client.name}: ${msg}`)
+      console.warn(`[youtube] InnerTube ${client.name} failed: ${msg}`)
+      errors.push(`InnerTube ${client.name}: ${msg}`)
     }
   }
 
-  if (errors.some((e) => /HTTP 429|rate.limit|captcha/i.test(e))) {
+  // Last resort: try HTML page scraping (can trigger captcha on datacenter IPs)
+  console.warn('[youtube] All InnerTube contexts failed, trying HTML page scrape...')
+  try {
+    const lines = await tryWebPageScrape(videoId, preferredLang)
+    console.log(`[youtube] Fetched transcript via HTML scrape (${lines.length} lines)`)
+    return lines.map((l) => ({
+      text: l.text,
+      offset: l.offset,
+      duration: l.duration,
+    }))
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn(`[youtube] HTML scrape failed: ${msg}`)
+    errors.push(`HTML scrape: ${msg}`)
+  }
+
+  // All methods failed
+  if (errors.some((e) => /rate.limit|captcha|temporarily/i.test(e))) {
     throw new YouTubeRateLimitError()
   }
 
@@ -273,6 +367,6 @@ export async function fetchYouTubeTranscript(
   }
 
   throw new YouTubeTranscriptError(
-    `Failed to fetch transcript after trying all clients. Errors: ${errors.join('; ')}`,
+    `Failed to fetch transcript. Errors: ${errors.join('; ')}`,
   )
 }
