@@ -53,6 +53,7 @@ ${flowToText(flow)}`
     ],
     format: 'json',
     temperature: 0.2,
+    label: 'judge:weighing',
   })
 
   console.log('[judge] Step 1: Weighing analysis complete')
@@ -97,6 +98,7 @@ ${flowToText(flow)}`
     ],
     format: 'json',
     temperature: 0.2,
+    label: 'judge:clashes',
   })
 
   const parsed = JSON.parse(response.content) as { clashVerdicts: ClashVerdict[] }
@@ -161,6 +163,7 @@ ${flowToText(flow)}`
     ],
     format: 'json',
     temperature: 0.3,
+    label: 'judge:devils-advocate',
   })
 
   const parsed = JSON.parse(response.content) as { positions: DevilsAdvocatePosition[] }
@@ -210,6 +213,7 @@ ${flowToText(flow)}`
       { role: 'user', content: user },
     ],
     temperature: 0.3,
+    label: 'judge:rfd',
   })
 
   console.log('[judge] Step 4: RFD written')
@@ -277,6 +281,7 @@ ${flowToText(flow)}`
     ],
     format: 'json',
     temperature: 0.2,
+    label: 'judge:speaks',
   })
 
   const parsed = JSON.parse(response.content) as { scores: SpeakerScore[] }
@@ -342,6 +347,7 @@ ${flowToText(flow)}`
     ],
     format: 'json',
     temperature: 0.3,
+    label: 'judge:feedback',
   })
 
   console.log('[judge] Step 6: Feedback generated')
@@ -349,6 +355,7 @@ ${flowToText(flow)}`
 }
 
 export async function judgeRound(flow: FlowSheet, topic: string): Promise<JudgingResult> {
+  const startMs = Date.now()
   console.log('[judge] Starting judging pipeline...')
 
   // Step 1: Weighing analysis
@@ -370,7 +377,7 @@ export async function judgeRound(flow: FlowSheet, topic: string): Promise<Judgin
   // Step 6: Generate feedback
   const { governmentTeam, oppositionTeam } = await generateFeedback(flow, clashVerdicts, speakerScores, provisionalWinner, rfd)
 
-  console.log(`[judge] Complete. Winner: ${provisionalWinner}`)
+  console.log(`[judge] Complete. Winner: ${provisionalWinner}. Total: ${Date.now() - startMs}ms`)
 
   return {
     winner: provisionalWinner,

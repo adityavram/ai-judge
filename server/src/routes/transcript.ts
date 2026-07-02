@@ -24,6 +24,7 @@ ${sampleText}`
       { role: 'user', content: user },
     ],
     temperature: 0.1,
+    label: 'transcript:infer-topic',
   })
 
   return response.content.trim()

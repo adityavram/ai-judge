@@ -32,6 +32,7 @@ export interface LlmChatOptions {
   format?: 'json'
   temperature?: number
   maxTokens?: number
+  label?: string
 }
 
 export interface LlmChatResponse {
@@ -122,11 +123,14 @@ export async function llmChat(opts: LlmChatOptions): Promise<LlmChatResponse> {
     body.options = { ...(body.options as Record<string, unknown>), num_predict: opts.maxTokens }
   }
 
+  const label = opts.label ?? 'unlabeled'
   let lastError: LlmError | null = null
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const startMs = Date.now()
     try {
       const res = await fetchWithTimeout(`${LLM_BASE}/api/chat`, JSON.stringify(body), REQUEST_TIMEOUT_MS)
+      const fetchMs = Date.now() - startMs
 
       if (res.ok) {
         const data = await res.json() as {
@@ -135,6 +139,11 @@ export async function llmChat(opts: LlmChatOptions): Promise<LlmChatResponse> {
           prompt_eval_count?: number
           eval_count?: number
         }
+        const totalMs = Date.now() - startMs
+        const tokens = data.prompt_eval_count !== undefined
+          ? `${data.prompt_eval_count}+${data.eval_count ?? 0} tokens`
+          : 'unknown tokens'
+        console.log(`[llm] ${label}: ${totalMs}ms (fetch ${fetchMs}ms, ${tokens}, model=${data.model})`)
         return {
           model: data.model,
           content: data.message.content,

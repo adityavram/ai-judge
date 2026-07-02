@@ -74,6 +74,7 @@ ${segment.text}`
     ],
     format: 'json',
     temperature: 0.2,
+    label: `flow:extract:${speechLabel}`,
   })
 
   const parsed = JSON.parse(response.content) as { args: ExtractedArg[] }
@@ -141,12 +142,14 @@ ${speechArgs
     ],
     format: 'json',
     temperature: 0.2,
+    label: 'flow:cluster',
   })
 
   return JSON.parse(response.content) as FlowSheet
 }
 
 export async function generateFlowSheet(segments: SpeakerSegment[]): Promise<FlowSheet> {
+  const startMs = Date.now()
   const errors: string[] = []
   const speechArgs: SpeechArgs[] = []
 
@@ -186,7 +189,7 @@ export async function generateFlowSheet(segments: SpeakerSegment[]): Promise<Flo
   console.log(`[flow] Clustering ${speechArgs.reduce((n, s) => n + s.args.length, 0)} args into clashes`)
   try {
     const flowSheet = await clusterIntoClashes(speechArgs)
-    console.log(`[flow] Generated ${flowSheet.clashes.length} clashes`)
+    console.log(`[flow] Generated ${flowSheet.clashes.length} clashes in ${Date.now() - startMs}ms total`)
     return flowSheet
   } catch (err) {
     if (err instanceof LlmError) throw err

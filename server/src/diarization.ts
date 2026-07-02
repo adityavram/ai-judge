@@ -213,6 +213,7 @@ ${previews.join('\n\n')}`
     ],
     format: 'json',
     temperature: 0.1,
+    label: 'diarization:validate-roles',
   })
 
   const parsed = JSON.parse(response.content) as { labels: string[] }
