@@ -150,19 +150,27 @@ export async function generateFlowSheet(segments: SpeakerSegment[]): Promise<Flo
   const errors: string[] = []
   const speechArgs: SpeechArgs[] = []
 
-  for (const seg of segments) {
-    try {
+  // Pass 1: Extract arguments from each speech in parallel
+  const results = await Promise.allSettled(
+    segments.map(async (seg) => {
       const args = await extractArgsFromSpeech(seg)
       const speechLabel = seg.speaker.split(' ')[0]
       const side = seg.speaker.includes('Government') ? 'Government' : 'Opposition'
       console.log(`[flow] Extracted ${args.length} args from ${speechLabel}`)
-      speechArgs.push({ speech: speechLabel, side, args })
-    } catch (err) {
+      return { speech: speechLabel, side, args } satisfies SpeechArgs
+    }),
+  )
+
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      speechArgs.push(result.value)
+    } else {
+      const err = result.reason
       // Propagate LlmError (token exhaustion, config) immediately
       if (err instanceof LlmError && (err.kind === 'token_exhausted' || err.kind === 'config')) throw err
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`[flow] Failed to extract args from ${seg.speaker}: ${msg}`)
-      errors.push(`${seg.speaker}: ${msg}`)
+      console.error(`[flow] Failed to extract args: ${msg}`)
+      errors.push(msg)
     }
   }
 

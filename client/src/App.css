@@ -35,13 +35,27 @@
 .error-message {
   max-width: 600px;
   margin: 16px auto;
-  padding: 14px 18px;
-  border-radius: 8px;
+  padding: 16px 20px;
+  border-radius: 10px;
   background: rgba(220, 38, 38, 0.06);
   border: 1px solid rgba(220, 38, 38, 0.2);
+  color: var(--text-h);
+  text-align: left;
+  font-size: 14px;
+}
+
+.error-step {
+  font-weight: 700;
   color: var(--opp);
-  text-align: center;
-  font-size: 15px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+}
+
+.error-detail {
+  color: var(--text-h);
+  line-height: 150%;
 }
 
 .section-divider {

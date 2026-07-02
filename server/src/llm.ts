@@ -4,7 +4,7 @@ const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-oss:120b'
 
 const MAX_RETRIES = 3
 const INITIAL_BACKOFF_MS = 5000
-const REQUEST_TIMEOUT_MS = 120000
+const REQUEST_TIMEOUT_MS = 180000
 
 export class LlmError extends Error {
   kind: 'rate_limit' | 'token_exhausted' | 'timeout' | 'config' | 'network' | 'unknown'
