@@ -1,4 +1,4 @@
-import type { FlowSheet, JudgingResult, WeighingAnalysis, ClashVerdict, DevilsAdvocatePosition, SpeakerScore, TeamFeedback, RFDSection } from './types.js'
+import type { FlowSheet, JudgingResult, WeighingAnalysis, ClashVerdict, DevilsAdvocatePosition, SpeakerScore, TeamFeedback, RFDSection, FlowClash } from './types.js'
 import { llmJSON } from './llm.js'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
@@ -13,7 +13,14 @@ const APDA_TECH_OVER_TRUTH = `APDA follows TECH OVER TRUTH: an argument made in 
 - "Under-substantiated" is NOT a valid reason to discount an argument that was never answered. If the other team didn't respond, the argument stands.
 - The ONLY way to defeat an argument is to directly engage it. Ignoring it concedes it.
 - Reply speeches (PMR, LOR) may crystallize and weigh existing arguments but may NOT introduce new ones.
-- Evaluate arguments based on whether they were ANSWERED, not on how "well-substantiated" they are in isolation.`
+- Evaluate arguments based on whether they were ANSWERED, not on how "well-substantiated" they are in isolation.
+
+CRITICAL — INDEPENDENT OFFENSE:
+- The MO and MG are constructive speeches. They may introduce NEW, INDEPENDENT arguments that are NOT responses to the other side's case. These are called "independent offense" or "independent arguments."
+- An independent argument from the MO (e.g., a new disadvantage, a counter-plan, a new framing) is just as valid as a PMC case point. It does NOT need to be a response to Government arguments.
+- When evaluating clashes, do NOT dismiss MO arguments just because they seem "new" — MO is a constructive speech and CAN introduce new arguments. Only PMR and LOR are restricted from new arguments.
+- Similarly, MG can introduce new arguments that extend or add to the Government case.
+- Independent offense from MO or MG must be weighed against the other side's case on its own merits, just like any other argument.`
 
 function flowToText(flow: FlowSheet): string {
   return flow.clashes
@@ -24,6 +31,13 @@ function flowToText(flow: FlowSheet): string {
       return `### ${clash.name}\n${args}`
     })
     .join('\n\n')
+}
+
+function clashToText(clash: FlowClash): string {
+  const args = clash.args
+    .map((a) => `  [${a.speech} (${a.side})] ${a.tag}: ${a.text}\n${a.components.map((c) => `    - ${c.label}: ${c.text}`).join('\n')}`)
+    .join('\n')
+  return `### ${clash.name}\n${args}`
 }
 
 // Step 1: Weighing analysis
@@ -70,33 +84,34 @@ ${flowToText(flow)}`
   return weighing
 }
 
-// Step 2: Clash evaluation based on weighing
-async function evaluateClashes(flow: FlowSheet, topic: string, weighing: WeighingAnalysis): Promise<ClashVerdict[]> {
-  const system = `You are an expert APDA debate judge. Given a flow sheet and weighing analysis, evaluate each clash point and determine who won it.
+// Step 2: Per-clash evaluation (parallel)
+async function evaluateSingleClash(
+  clash: FlowClash,
+  topic: string,
+  weighing: WeighingAnalysis,
+  allClashNames: string[],
+): Promise<ClashVerdict> {
+  const system = `You are an expert APDA debate judge. You are evaluating a SINGLE clash point from a debate round. You must determine who won this specific clash.
 
 ${APDA_TECH_OVER_TRUTH}
 
-For each clash:
+Evaluate this clash independently. Other clashes in this round (${allClashNames.filter((n) => n !== clash.name).join(', ')}) are being evaluated separately — do NOT assume they all go the same way. It is COMMON for different clashes to be won by different sides.
+
+For this clash:
 - Determine the winner (Government, Opposition, or Tie)
 - Explain the reasoning (which args were stronger, what was dropped, which links were conceded)
 - Note the key arguments that decided the clash
 - IMPORTANT: Identify any arguments from PMR or LOR that appear to be NEW (not referenced or foreshadowed in earlier speeches). In APDA, reply speeches may only crystallize and weigh — they may NOT introduce new arguments. Flag suspected new arguments as "newArgs" and discount them heavily in your evaluation.
 
-CRITICAL: Evaluate EACH clash independently on its own merits. It is COMMON and EXPECTED for different clashes to be won by different sides. A round is not a sweep — most rounds have clashes on both sides. Do NOT default to giving all clashes to the same team. If the Opposition won a clash on their own terms, say so. If the Government won a clash on their own terms, say so. Ties are also valid when neither side clearly wins.
-
-Use the weighing analysis to prioritize which arguments matter most within each clash.
+Use the weighing analysis to understand which arguments matter most.
 
 Respond with ONLY valid JSON:
 {
-  "clashVerdicts": [
-    {
-      "clashName": "Name of the clash",
-      "winner": "Government|Opposition|Tie",
-      "reasoning": "2-4 sentences explaining who won and why",
-      "keyArgs": ["Short descriptions of the decisive arguments"],
-      "newArgs": ["Any arguments from PMR/LOR that appear to be new (not foreshadowed in earlier speeches). Empty array if none suspected."]
-    }
-  ]
+  "clashName": "${clash.name}",
+  "winner": "Government|Opposition|Tie",
+  "reasoning": "2-4 sentences explaining who won this clash and why",
+  "keyArgs": ["Short descriptions of the decisive arguments"],
+  "newArgs": ["Any arguments from PMR/LOR that appear to be new (not foreshadowed in earlier speeches). Empty array if none suspected."]
 }`
 
   const user = `Topic: ${topic}
@@ -104,8 +119,8 @@ Respond with ONLY valid JSON:
 Weighing analysis:
 ${JSON.stringify(weighing, null, 2)}
 
-Flow sheet:
-${flowToText(flow)}`
+Clash to evaluate:
+${clashToText(clash)}`
 
   const parsed = await llmJSON({
     messages: [
@@ -114,14 +129,27 @@ ${flowToText(flow)}`
     ],
     format: 'json',
     temperature: 0.2,
-    label: 'judge:clashes',
-  }) as { clashVerdicts: ClashVerdict[] }
-  console.log(`[judge] Step 2: Evaluated ${parsed.clashVerdicts.length} clashes`)
-  return parsed.clashVerdicts
+    label: `judge:clash:${clash.name}`,
+  }) as ClashVerdict
+
+  // Ensure the clash name matches
+  parsed.clashName = clash.name
+  return parsed
 }
 
-// Step 3: Determine provisional winner, then generate devil's advocate positions
-async function determineProvisionalWinner(clashVerdicts: ClashVerdict[]): Promise<'Government' | 'Opposition'> {
+async function evaluateClashes(flow: FlowSheet, topic: string, weighing: WeighingAnalysis): Promise<ClashVerdict[]> {
+  const allClashNames = flow.clashes.map((c) => c.name)
+
+  const verdicts = await Promise.all(
+    flow.clashes.map((clash) => evaluateSingleClash(clash, topic, weighing, allClashNames)),
+  )
+
+  console.log(`[judge] Step 2: Evaluated ${verdicts.length} clashes: ${verdicts.map((v) => `${v.clashName}→${v.winner}`).join(', ')}`)
+  return verdicts
+}
+
+// Step 3: Determine provisional winner (deterministic)
+function determineProvisionalWinner(clashVerdicts: ClashVerdict[]): 'Government' | 'Opposition' {
   const govWins = clashVerdicts.filter((c) => c.winner === 'Government').length
   const oppWins = clashVerdicts.filter((c) => c.winner === 'Opposition').length
   return govWins >= oppWins ? 'Government' : 'Opposition'
@@ -201,7 +229,7 @@ The winner is ${provisionalWinner}. Write a structured RFD with exactly these 4 
 
 Sections:
 1. "weighing": What is the winning team's weighing in this round? What metric/scope did they win on? (2-3 sentences)
-2. "weighingComparison": Why does the winning team's weighing matter more than the losing team's weighing? How did the winning team out-weigh? (2-3 sentences)
+2. "weighingComparison": You MUST explicitly identify the losing team's (${losingSide}'s) weighing — what metric/scope did they argue should decide the round? — and then explain why ${provisionalWinner}'s weighing comes first. Address the competing weighing directly: why does ${provisionalWinner}'s framing outweigh ${losingSide}'s framing? (2-4 sentences)
 3. "whyWinnerWon": Why did ${provisionalWinner} win this round? The core thesis of the decision. (2-3 sentences, be specific about key arguments)
 4. "linkByLink": For each clash that ${provisionalWinner} won, briefly explain which links held and which ${losingSide} links fell. If ${losingSide} won any clashes, explain why those weren't enough to win the round. (1-2 sentences per clash)
 
@@ -248,15 +276,41 @@ ${flowToText(flow)}`
   return parsed
 }
 
-// Step 5: Assign speaks and ranks
-async function assignSpeaks(
+// Step 5: Per-debater speaker scores (parallel)
+const DEBATER_SPEECHES: Record<string, string[]> = {
+  'Prime Minister': ['PMC', 'PMR'],
+  'Leader of Opposition': ['LOC', 'LOR'],
+  'Member of Government': ['MG'],
+  'Member of Opposition': ['MO'],
+}
+
+async function scoreDebater(
+  debaterName: string,
+  speeches: string[],
   flow: FlowSheet,
   topic: string,
   clashVerdicts: ClashVerdict[],
   winner: 'Government' | 'Opposition',
   rfd: RFDSection,
 ): Promise<SpeakerScore[]> {
-  const system = `You are an expert APDA debate judge assigning speaker scores and ranks.
+  const side = speeches[0] === 'PMC' || speeches[0] === 'MG' || speeches[0] === 'PMR'
+    ? 'Government'
+    : speeches[0] === 'LOC' || speeches[0] === 'MO' || speeches[0] === 'LOR'
+      ? 'Opposition'
+      : 'Unknown'
+
+  const isReplyDebater = speeches.includes('PMR') || speeches.includes('LOR')
+
+  // Extract this debater's arguments from the flow
+  const debaterArgs = flow.clashes
+    .map((clash) => clash.args.filter((a) => speeches.includes(a.speech)))
+    .flat()
+
+  const argsText = debaterArgs.length > 0
+    ? debaterArgs.map((a) => `[${a.speech}] ${a.tag}: ${a.text}`).join('\n')
+    : 'No arguments found for this debater in the flow.'
+
+  const system = `You are an expert APDA debate judge assigning speaker scores and ranks for a SINGLE debater.
 
 ${APDA_TECH_OVER_TRUTH}
 
@@ -273,29 +327,23 @@ PRACTICAL CALIBRATION — The written scale is aspirational. In real APDA practi
 
 DO NOT give scores below 18 unless the speech was actively harmful or offensive. Most scores should fall between 22 and 30.
 
-Rules:
-- Scores are whole numbers from ~5 to ~45, with 25 being average
-- Choose the LOWEST category the speech falls into (limited by weakest criterion)
-- No "low-point wins" — the losing team's total speaks must be equal or lower than the winning team's total
-- There are 4 debaters who each give 2 speeches. Score each of the 6 speeches individually, but assign RANKS to the 4 DEBATERS (not speeches):
-  - Prime Minister (PMC + PMR) = 1 debater
-  - Leader of Opposition (LOC + LOR) = 1 debater
-  - Member of Government (MG) = 1 debater
-  - Member of Opposition (MO) = 1 debater
-- Ranks: 1 (best) to 4 (worst). CRITICAL: ranks MUST be a permutation of {1, 2, 3, 4} — each DEBATER gets a DISTINCT rank, no ties, no gaps, no repeats. A debater's two speeches share the same rank (e.g., if PM is rank 1, both PMC and PMR get rank 1). Determine the debater's rank based on their combined contribution across both speeches.
-- Evaluate each speaker on: warrant quality, impact quality, weighing quality, engagement, and argument quality
-- IMPORTANT: PMR and LOR are reply speeches. They should be evaluated on crystallization, weighing, and voter identification — NOT on new argumentation. If a reply speech introduces new arguments, this is a negative, not a positive. Penalize reply speeches that make new arguments rather than crystallizing existing ones.
-- If any clash verdicts flagged "newArgs" from PMR or LOR, those new arguments should LOWER the reply speaker's score, not raise it.
+You are scoring: ${debaterName} (${side}), who gave these speeches: ${speeches.join(', ')}.
+${isReplyDebater ? 'This debater gave a reply speech (PMR or LOR). Reply speeches should be evaluated on crystallization, weighing, and voter identification — NOT on new argumentation. If they introduced new arguments, that is a NEGATIVE.' : ''}
 
-Evaluate each of the 6 speeches (PMC, LOC, MG, MO, LOR, PMR) based on their contributions in the flow sheet. Each speech gets its own score, but the two speeches by the same debater share a rank.
+Rules:
+- Score each speech individually on the APDA scale
+- This debater gets a SINGLE rank (shared across their speeches). You will assign it here — other debaters are being scored separately, and ranks will be reconciled afterward.
+- For now, assign a tentative rank from 1-4 based on this debater's performance relative to an average debater (1=best, 4=worst). The final ranks will be adjusted to ensure no ties.
+- Evaluate each speech on: warrant quality, impact quality, weighing quality, engagement, and argument quality
+- No "low-point wins" — but since you're only scoring one debater, just score fairly
 
 Respond with ONLY valid JSON:
 {
   "scores": [
-    {
-      "speech": "PMC",
-      "speaker": "Prime Minister",
-      "side": "Government",
+    ${speeches.map((s) => `{
+      "speech": "${s}",
+      "speaker": "${debaterName}",
+      "side": "${side}",
       "score": 25,
       "rank": 1,
       "warrant": "Brief assessment of warrant quality",
@@ -304,12 +352,13 @@ Respond with ONLY valid JSON:
       "engagement": "Brief assessment of engagement",
       "argumentQuality": "Brief assessment of argument quality",
       "justification": "1-2 sentences on why this score and rank"
-    }
+    }`).join(',\n    ')}
   ]
 }`
 
   const user = `Topic: ${topic}
 Winner: ${winner}
+Debater: ${debaterName} (${side}), speeches: ${speeches.join(', ')}
 
 RFD:
 Weighing: ${rfd.weighing}
@@ -317,11 +366,11 @@ Why this weighing outweighs: ${rfd.weighingComparison}
 Why ${winner} won: ${rfd.whyWinnerWon}
 Link-by-link: ${rfd.linkByLink}
 
-Clash verdicts:
+Relevant clash verdicts:
 ${JSON.stringify(clashVerdicts, null, 2)}
 
-Flow sheet:
-${flowToText(flow)}`
+This debater's arguments from the flow:
+${argsText}`
 
   const parsed = await llmJSON({
     messages: [
@@ -330,11 +379,30 @@ ${flowToText(flow)}`
     ],
     format: 'json',
     temperature: 0.2,
-    label: 'judge:speaks',
+    label: `judge:speaks:${debaterName}`,
   }) as { scores: SpeakerScore[] }
-  const scores = fixupRanks(parsed.scores)
-  console.log(`[judge] Step 5: Assigned speaks: ${scores.map((s) => `${s.speech}=${s.score}(${s.rank})`).join(', ')}`)
-  return scores
+
+  console.log(`[judge] Step 5: Scored ${debaterName}: ${parsed.scores.map((s) => `${s.speech}=${s.score}`).join(', ')}`)
+  return parsed.scores
+}
+
+async function assignSpeaks(
+  flow: FlowSheet,
+  topic: string,
+  clashVerdicts: ClashVerdict[],
+  winner: 'Government' | 'Opposition',
+  rfd: RFDSection,
+): Promise<SpeakerScore[]> {
+  const debaterEntries = Object.entries(DEBATER_SPEECHES)
+
+  const results = await Promise.all(
+    debaterEntries.map(([name, speeches]) =>
+      scoreDebater(name, speeches, flow, topic, clashVerdicts, winner, rfd),
+    ),
+  )
+
+  const allScores = results.flat()
+  return fixupRanks(allScores)
 }
 
 function fixupRanks(scores: SpeakerScore[]): SpeakerScore[] {
@@ -460,17 +528,20 @@ export async function judgeRound(flow: FlowSheet, topic: string): Promise<Judgin
   // Step 1: Weighing analysis
   const weighing = await analyzeWeighing(flow, topic)
 
-  // Step 2: Clash evaluation
+  // Step 2: Per-clash evaluation (parallel)
   const clashVerdicts = await evaluateClashes(flow, topic, weighing)
 
-  // Step 3: Determine provisional winner, then devil's advocate
-  const provisionalWinner = await determineProvisionalWinner(clashVerdicts)
-  const devilsAdvocate = await generateDevilsAdvocate(flow, topic, weighing, clashVerdicts, provisionalWinner)
+  // Step 3: Determine provisional winner (deterministic), then devil's advocate
+  const provisionalWinner = determineProvisionalWinner(clashVerdicts)
+  console.log(`[judge] Step 3: Provisional winner: ${provisionalWinner}`)
 
-  // Step 4: Write RFD
-  const rfd = await writeRFD(flow, topic, weighing, clashVerdicts, provisionalWinner)
+  // Step 4 & 5 can run in parallel with devil's advocate
+  const [devilsAdvocate, rfd] = await Promise.all([
+    generateDevilsAdvocate(flow, topic, weighing, clashVerdicts, provisionalWinner),
+    writeRFD(flow, topic, weighing, clashVerdicts, provisionalWinner),
+  ])
 
-  // Step 5: Assign speaks
+  // Step 5: Per-debater speaker scores (parallel)
   const speakerScores = await assignSpeaks(flow, topic, clashVerdicts, provisionalWinner, rfd)
 
   // Step 6: Generate feedback
