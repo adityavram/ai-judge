@@ -6,7 +6,7 @@ import { generateFlowSheet } from '../flow.js'
 import { judgeRound } from '../judge.js'
 import { llmChat, LlmError, llmErrorToResponse } from '../llm.js'
 import { rateLimit, requireClientId } from '../rateLimit.js'
-import { getCachedTranscript, saveTranscriptCache, getCachedFlow, saveFlowCache, getCachedJudge, saveJudgeCache } from '../db.js'
+import { getCachedTranscript, saveTranscriptCache, getCachedFlow, saveFlowCache, getCachedJudge, saveJudgeCache, getCachedRawTranscript, saveRawTranscriptCache } from '../db.js'
 import type { CaptionSegment, Transcript, FlowSheet, JudgingResult } from '../types.js'
 
 const router = Router()
@@ -14,8 +14,8 @@ const router = Router()
 const MAX_URL_LENGTH = 500
 const MAX_TOPIC_LENGTH = 1000
 
-export type PipelineStatus = 'transcript' | 'flow' | 'judge' | 'done' | 'error'
-export type ResumeFrom = 'transcript' | 'flow' | 'judge'
+export type PipelineStatus = 'transcript' | 'diarize' | 'flow' | 'judge' | 'done' | 'error'
+export type ResumeFrom = 'transcript' | 'diarize' | 'flow' | 'judge'
 
 interface PipelineJob {
   id: string
@@ -82,8 +82,10 @@ async function fetchTranscriptData(videoId: string): Promise<{ text: string; off
 
 async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: ResumeFrom): Promise<void> {
   try {
-    // Step 1: Transcript
-    const cachedTranscript = (resumeFrom !== 'transcript') ? getCachedTranscript(job.videoId) : null
+    // Step 1a: Fetch raw captions from YouTube (or cache)
+    // Step 1b: Diarize into speaker segments (or cache)
+    // These are separate so we can re-diarize without re-fetching from YouTube.
+    const cachedTranscript = (resumeFrom !== 'transcript' && resumeFrom !== 'diarize') ? getCachedTranscript(job.videoId) : null
     if (cachedTranscript) {
       console.log(`[pipeline:${job.id}] Cache hit for transcript`)
       job.transcript = {
@@ -98,18 +100,42 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
     }
 
     if (!job.transcript) {
-      job.status = 'transcript'
-      const rawCaptions = await fetchTranscriptData(job.videoId)
+      let captionSegments: CaptionSegment[]
 
-      const captionSegments: CaptionSegment[] = rawCaptions.map((c) => ({
-        text: c.text,
-        start: c.offset / 1000,
-        duration: c.duration / 1000,
-      }))
+      // Try raw transcript cache first (unless re-pulling from YouTube)
+      const cachedRaw = (resumeFrom !== 'transcript') ? getCachedRawTranscript(job.videoId) : null
+      if (cachedRaw) {
+        console.log(`[pipeline:${job.id}] Cache hit for raw transcript`)
+        const rawCaptions = JSON.parse(cachedRaw.raw_captions) as { text: string; offset: number; duration: number }[]
+        captionSegments = rawCaptions.map((c) => ({
+          text: c.text,
+          start: c.offset / 1000,
+          duration: c.duration / 1000,
+        }))
+      } else {
+        job.status = 'transcript'
+        const rawCaptions = await fetchTranscriptData(job.videoId)
 
+        // Cache raw captions (before diarization)
+        try {
+          saveRawTranscriptCache(job.videoId, JSON.stringify(rawCaptions))
+          console.log(`[pipeline:${job.id}] Cached raw transcript for video ${job.videoId}`)
+        } catch (cacheErr) {
+          console.warn(`[pipeline:${job.id}] Failed to cache raw transcript:`, cacheErr instanceof Error ? cacheErr.message : cacheErr)
+        }
+
+        captionSegments = rawCaptions.map((c) => ({
+          text: c.text,
+          start: c.offset / 1000,
+          duration: c.duration / 1000,
+        }))
+      }
+
+      // Diarize: assign speaker labels
       let resolvedTopic = topic?.trim() ?? ''
       let topicInferred = false
 
+      job.status = 'diarize'
       const { segments, confidence, detectedSpeechCount } = await assignSpeakers(captionSegments, resolvedTopic || undefined)
 
       if (!resolvedTopic) {
@@ -151,7 +177,7 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
         topicInferred,
       }
 
-      // Cache transcript
+      // Cache full transcript (after diarization)
       try {
         saveTranscriptCache(
           job.videoId,
@@ -169,7 +195,7 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
     }
 
     // Step 2: Flow
-    const cachedFlow = (resumeFrom !== 'transcript' && resumeFrom !== 'flow') ? getCachedFlow(job.videoId, job.transcript.topic) : null
+    const cachedFlow = (resumeFrom !== 'transcript' && resumeFrom !== 'diarize' && resumeFrom !== 'flow') ? getCachedFlow(job.videoId, job.transcript.topic) : null
     if (cachedFlow) {
       console.log(`[pipeline:${job.id}] Cache hit for flow`)
       job.flow = JSON.parse(cachedFlow.flow)
@@ -214,6 +240,7 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
     console.log(`[pipeline:${job.id}] Complete! Winner: ${job.judging.winner}`)
   } catch (err) {
     const stepLabel = job.status === 'transcript' ? 'Transcript'
+      : job.status === 'diarize' ? 'Diarize'
       : job.status === 'flow' ? 'Flow'
       : 'Judging'
     job.errorStep = stepLabel
@@ -241,7 +268,7 @@ router.post('/', rateLimit, async (req, res) => {
     return res.status(400).json({ error: 'Topic is too long' })
   }
 
-  const validResume = resumeFrom === 'transcript' || resumeFrom === 'flow' || resumeFrom === 'judge' ? resumeFrom : undefined
+  const validResume = resumeFrom === 'transcript' || resumeFrom === 'diarize' || resumeFrom === 'flow' || resumeFrom === 'judge' ? resumeFrom : undefined
 
   const videoId = extractVideoId(url)
   if (!videoId) {
@@ -252,6 +279,7 @@ router.post('/', rateLimit, async (req, res) => {
 
   const id = randomUUID()
   const initialStatus = validResume === 'transcript' ? 'transcript'
+    : validResume === 'diarize' ? 'diarize'
     : validResume === 'flow' ? 'flow'
     : validResume === 'judge' ? 'judge'
     : 'transcript'

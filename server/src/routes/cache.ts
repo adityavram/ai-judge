@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { getCachedTranscript, getCachedFlow, getCachedJudge, listCachedRounds } from '../db.js'
+import { getCachedTranscript, getCachedFlow, getCachedJudge, getCachedRawTranscript, listCachedRounds } from '../db.js'
 
 const router = Router()
 
@@ -34,27 +34,27 @@ router.get('/rounds/:videoId', (req, res) => {
 
   const flow = getCachedFlow(videoId, transcript.topic)
   const judge = getCachedJudge(videoId, transcript.topic)
+  const rawTranscript = getCachedRawTranscript(videoId)
 
   const response: Record<string, unknown> = {
     videoId: transcript.video_id,
     topic: transcript.topic,
     topicInferred: transcript.topic_inferred === 1,
     hasTranscript: true,
+    hasRawTranscript: rawTranscript !== null,
     hasFlow: flow !== null,
     hasJudge: judge !== null,
     createdAt: transcript.created_at,
   }
 
-  if (transcript) {
-    response.transcript = {
-      videoId: transcript.video_id,
-      rawSegments: JSON.parse(transcript.raw_segments),
-      segments: JSON.parse(transcript.segments),
-      segmentationConfidence: transcript.confidence,
-      detectedSpeechCount: transcript.detected_speech_count,
-      topic: transcript.topic,
-      topicInferred: transcript.topic_inferred === 1,
-    }
+  response.transcript = {
+    videoId: transcript.video_id,
+    rawSegments: JSON.parse(transcript.raw_segments),
+    segments: JSON.parse(transcript.segments),
+    segmentationConfidence: transcript.confidence,
+    detectedSpeechCount: transcript.detected_speech_count,
+    topic: transcript.topic,
+    topicInferred: transcript.topic_inferred === 1,
   }
   if (flow) response.flow = JSON.parse(flow.flow)
   if (judge) response.judging = JSON.parse(judge.result)

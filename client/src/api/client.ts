@@ -121,7 +121,7 @@ export interface JudgingResult {
   oppositionTeam: TeamFeedback
 }
 
-export type PipelineStatus = 'transcript' | 'flow' | 'judge' | 'done' | 'error'
+export type PipelineStatus = 'transcript' | 'diarize' | 'flow' | 'judge' | 'done' | 'error'
 
 export interface PipelineState {
   id: string
@@ -135,7 +135,7 @@ export interface PipelineState {
 
 const MAX_POLL_RETRIES = 3
 
-export async function startPipeline(url: string, topic?: string, resumeFrom?: 'transcript' | 'flow' | 'judge'): Promise<string> {
+export async function startPipeline(url: string, topic?: string, resumeFrom?: 'transcript' | 'diarize' | 'flow' | 'judge'): Promise<string> {
   const res = await fetch(`${API_BASE}/api/pipeline`, {
     method: 'POST',
     headers: authHeaders(),

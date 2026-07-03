@@ -1,6 +1,6 @@
 import './ProgressPipeline.css'
 
-export type PipelineStep = 'idle' | 'transcript' | 'flow' | 'judge' | 'done' | 'error'
+export type PipelineStep = 'idle' | 'transcript' | 'diarize' | 'flow' | 'judge' | 'done' | 'error'
 
 interface ProgressPipelineProps {
   currentStep: PipelineStep
@@ -8,13 +8,14 @@ interface ProgressPipelineProps {
 }
 
 const STEPS = [
-  { key: 'transcript', label: 'Transcript', desc: 'Fetching YouTube captions & segmenting speeches' },
+  { key: 'transcript', label: 'Transcript', desc: 'Fetching YouTube captions' },
+  { key: 'diarize', label: 'Diarize', desc: 'Segmenting & assigning speaker roles' },
   { key: 'flow', label: 'Flow', desc: 'Extracting arguments & building clash structure' },
   { key: 'judge', label: 'Judging', desc: 'Weighing, evaluating clashes, devil\'s advocate, RFD' },
 ] as const
 
 export function ProgressPipeline({ currentStep, errors }: ProgressPipelineProps) {
-  const order: PipelineStep[] = ['idle', 'transcript', 'flow', 'judge', 'done']
+  const order: PipelineStep[] = ['idle', 'transcript', 'diarize', 'flow', 'judge', 'done']
   const currentIdx = order.indexOf(currentStep)
 
   return (

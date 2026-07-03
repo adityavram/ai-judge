@@ -26,6 +26,13 @@ function getDb(): Database.Database {
       )
     `)
     db.exec(`
+      CREATE TABLE IF NOT EXISTS raw_transcript_cache (
+        video_id TEXT PRIMARY KEY,
+        raw_captions TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `)
+    db.exec(`
       CREATE TABLE IF NOT EXISTS transcript_cache (
         video_id TEXT PRIMARY KEY,
         raw_segments TEXT NOT NULL,
@@ -65,6 +72,12 @@ export interface FeedbackRecord {
   rating: number | null
   message: string
   video_url: string | null
+  created_at: string
+}
+
+export interface RawTranscriptCacheRow {
+  video_id: string
+  raw_captions: string
   created_at: string
 }
 
@@ -113,6 +126,20 @@ export function getFeedbackCount(): number {
   const db = getDb()
   const row = db.prepare('SELECT COUNT(*) as count FROM feedback').get() as { count: number }
   return row.count
+}
+
+// Raw transcript cache (raw captions before diarization)
+export function getCachedRawTranscript(videoId: string): RawTranscriptCacheRow | null {
+  const db = getDb()
+  return db.prepare('SELECT * FROM raw_transcript_cache WHERE video_id = ?').get(videoId) as RawTranscriptCacheRow | null
+}
+
+export function saveRawTranscriptCache(videoId: string, rawCaptions: string): void {
+  const db = getDb()
+  db.prepare(`
+    INSERT OR REPLACE INTO raw_transcript_cache (video_id, raw_captions)
+    VALUES (?, ?)
+  `).run(videoId, rawCaptions)
 }
 
 // Transcript cache

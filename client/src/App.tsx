@@ -39,6 +39,9 @@ function friendlyError(state: PipelineState): string {
     if (raw.includes('Could not extract video ID')) return 'That does not look like a valid YouTube URL. Please check and try again.'
     return `Failed to process the video transcript. ${raw}`
   }
+  if (step === 'Diarize') {
+    return `Failed to segment speeches. ${raw}`
+  }
   if (step === 'Flow') {
     if (raw.includes('All speeches failed')) return 'Could not analyze any of the speeches. The video may be too long or the captions too unclear.'
     return `Failed to generate the flow. ${raw}`
@@ -57,7 +60,7 @@ function App() {
   const [errors, setErrors] = useState<{ step: string; message: string }[]>([])
   const [lastUrl, setLastUrl] = useState('')
 
-  const runPipeline = async (url: string, topic: string, resumeFrom?: 'transcript' | 'flow' | 'judge') => {
+  const runPipeline = async (url: string, topic: string, resumeFrom?: 'transcript' | 'diarize' | 'flow' | 'judge') => {
     setLastUrl(url)
     if (!resumeFrom) {
       setPipelineStep('transcript')
@@ -68,6 +71,11 @@ function App() {
     } else if (resumeFrom === 'transcript') {
       setPipelineStep('transcript')
       setTranscript(null)
+      setFlow(null)
+      setJudging(null)
+      setErrors([])
+    } else if (resumeFrom === 'diarize') {
+      setPipelineStep('diarize')
       setFlow(null)
       setJudging(null)
       setErrors([])
@@ -89,6 +97,7 @@ function App() {
         const state = await pollPipeline(jobId)
 
         if (state.status === 'transcript') setPipelineStep('transcript')
+        else if (state.status === 'diarize') setPipelineStep('diarize')
         else if (state.status === 'flow') setPipelineStep('flow')
         else if (state.status === 'judge') setPipelineStep('judge')
         else if (state.status === 'done') {
@@ -188,14 +197,23 @@ function App() {
           <>
             <Collapsible title="Transcript" badge={`${transcript.segments.length} speeches`} defaultOpen={false}>
               <TranscriptView transcript={transcript} />
+              {pipelineStep === 'done' && (
+                <button
+                  className="regenerate-btn"
+                  onClick={() => runPipeline(lastUrl, '', 'transcript')}
+                  disabled={busy}
+                >
+                  Repull Transcript
+                </button>
+              )}
             </Collapsible>
             {pipelineStep === 'done' && (
               <button
                 className="regenerate-btn"
-                onClick={() => runPipeline(lastUrl, '', 'transcript')}
+                onClick={() => runPipeline(lastUrl, '', 'diarize')}
                 disabled={busy}
               >
-                Repull Transcript
+                Re-segment
               </button>
             )}
           </>
