@@ -36,6 +36,22 @@ const CLIENT_CONTEXTS: ClientContext[] = [
     useApiKey: false,
   },
   {
+    name: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+    context: {
+      client: {
+        clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+        clientVersion: '2.0',
+        hl: 'en',
+        gl: 'US',
+      },
+      thirdParty: {
+        embedUrl: 'https://www.google.com',
+      },
+    },
+    userAgent: BROWSER_USER_AGENT,
+    useApiKey: true,
+  },
+  {
     name: 'WEB_EMBEDDED',
     context: {
       client: {
@@ -63,6 +79,19 @@ const CLIENT_CONTEXTS: ClientContext[] = [
     },
     userAgent: 'com.google.ios.youtube/20.10.38 (iPhone16,2; U; CPU iOS 18_0 like Mac OS X)',
     useApiKey: false,
+  },
+  {
+    name: 'MWEB',
+    context: {
+      client: {
+        clientName: 'MWEB',
+        clientVersion: '2.20240726.05.00',
+        hl: 'en',
+        gl: 'US',
+      },
+    },
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+    useApiKey: true,
   },
 ]
 
@@ -316,12 +345,39 @@ export function extractVideoId(urlOrId: string): string | null {
  * Fetch YouTube transcript.
  * 1. Try InnerTube API with multiple client contexts (no captcha risk)
  * 2. If all fail, try HTML page scraping as last resort (may trigger captcha)
- * 3. Cache prevents most repeat fetches
+ * 3. Retry with exponential backoff on transient failures
+ * 4. Cache prevents most repeat fetches
  */
+const MAX_RETRIES = 2
+const RETRY_DELAY_MS = 3000
+
 export async function fetchYouTubeTranscript(
   videoId: string,
   preferredLang?: string,
 ): Promise<{ text: string; offset: number; duration: number }[]> {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const result = await tryFetchTranscript(videoId, preferredLang)
+    if (result) return result
+
+    if (attempt < MAX_RETRIES) {
+      const delay = RETRY_DELAY_MS * Math.pow(2, attempt)
+      console.warn(`[youtube] All methods failed, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})...`)
+      await new Promise((r) => setTimeout(r, delay))
+    }
+  }
+
+  // Final attempt already happened, throw from last try
+  return tryFetchTranscript(videoId, preferredLang)
+    .then((r) => r!)
+    .catch(() => {
+      throw new YouTubeTranscriptError('Failed to fetch transcript after multiple retries. Please try again in a few minutes.')
+    })
+}
+
+async function tryFetchTranscript(
+  videoId: string,
+  preferredLang?: string,
+): Promise<{ text: string; offset: number; duration: number }[] | null> {
   const errors: string[] = []
 
   // Try each InnerTube client context
@@ -357,7 +413,7 @@ export async function fetchYouTubeTranscript(
     errors.push(`HTML scrape: ${msg}`)
   }
 
-  // All methods failed
+  // All methods failed this attempt
   if (errors.some((e) => /rate.limit|captcha|temporarily/i.test(e))) {
     throw new YouTubeRateLimitError()
   }
@@ -366,7 +422,6 @@ export async function fetchYouTubeTranscript(
     throw new YouTubeNoTranscriptError(videoId)
   }
 
-  throw new YouTubeTranscriptError(
-    `Failed to fetch transcript. Errors: ${errors.join('; ')}`,
-  )
+  // Return null to signal retry is needed
+  return null
 }
