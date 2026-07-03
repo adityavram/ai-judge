@@ -31,6 +31,8 @@ const APDA_DURATIONS = [420, 480, 480, 480, 240, 240] // 7, 8, 8, 8, 4, 4 min
 const MIN_GAP_S = 2.0 // Ignore gaps smaller than 2 seconds
 const MAX_GAP_S = 120.0 // Ignore absurdly large gaps (likely bad timestamps)
 const MIN_SPEECH_WORDS = 50 // Skip blocks with fewer than 50 words (likely noise)
+const MIN_SPEECH_S = 45 // Skip blocks shorter than 45 seconds (likely noise or moderator intro)
+const MIN_REPLY_S = 30 // Reply speeches can be as short as 30 seconds
 
 export interface DiarizationResult {
   segments: SpeakerSegment[]
@@ -263,14 +265,12 @@ function removeSmallBlocks(captions: CaptionSegment[], splits: number[]): number
   let blocks = buildBlocks(captions, splits)
   const toRemove: number[] = []
 
-  // Compute cumulative offsets
   let offset = 0
   for (let i = 0; i < blocks.length; i++) {
     const words = blockWordCount(blocks[i])
     const dur = blockDuration(blocks[i])
     // Remove blocks that are too short in both words and time
     if (words < MIN_SPEECH_WORDS && dur < 30) {
-      // Remove the split that starts this block
       if (i > 0 && i - 1 < splits.length) {
         toRemove.push(splits[i - 1])
       }
@@ -280,6 +280,44 @@ function removeSmallBlocks(captions: CaptionSegment[], splits: number[]): number
 
   if (toRemove.length === 0) return splits
   return splits.filter((s) => !toRemove.includes(s))
+}
+
+// Merge blocks that are too short for their speech type into a neighbor
+function mergeShortBlocks(blocks: CaptionSegment[][], labels: string[]): { blocks: CaptionSegment[][]; labels: string[] } {
+  const result: CaptionSegment[][] = []
+  const resultLabels: string[] = []
+
+  for (let i = 0; i < blocks.length; i++) {
+    const dur = blockDuration(blocks[i])
+    const label = labels[i] ?? `Speech ${i + 1}`
+    const isReply = label === 'LOR' || label === 'PMR'
+    const minDur = isReply ? MIN_REPLY_S : MIN_SPEECH_S
+
+    if (dur < minDur) {
+      const side = getSideForLabel(label)
+      const prevSame = result.length > 0 && getSideForLabel(resultLabels[resultLabels.length - 1]) === side
+      const nextSame = i + 1 < blocks.length && getSideForLabel(labels[i + 1]) === side
+
+      if (prevSame) {
+        console.log(`[diarization] Merging short block ${label} (${(dur / 60).toFixed(1)}min) into previous ${resultLabels[resultLabels.length - 1]}`)
+        result[result.length - 1] = [...result[result.length - 1], ...blocks[i]]
+      } else if (nextSame) {
+        console.log(`[diarization] Merging short block ${label} (${(dur / 60).toFixed(1)}min) into next ${labels[i + 1]}`)
+        blocks[i + 1] = [...blocks[i], ...blocks[i + 1]]
+      } else if (result.length > 0) {
+        console.log(`[diarization] Merging short block ${label} (${(dur / 60).toFixed(1)}min) into previous (different side)`)
+        result[result.length - 1] = [...result[result.length - 1], ...blocks[i]]
+      } else {
+        result.push(blocks[i])
+        resultLabels.push(label)
+      }
+    } else {
+      result.push(blocks[i])
+      resultLabels.push(label)
+    }
+  }
+
+  return { blocks: result, labels: resultLabels }
 }
 
 // Trim pleasantries, intros, and outro padding from block boundaries
@@ -483,15 +521,18 @@ export async function assignSpeakers(captions: CaptionSegment[], topic?: string)
       }
     }
 
-    const segments: SpeakerSegment[] = trimmedBlocks.map((block, i) => {
-      const label = trimmedLabels[i] ?? `Speech ${i + 1}`
+    // Merge blocks that are too short for their speech type
+    const merged = mergeShortBlocks(trimmedBlocks, trimmedLabels)
+
+    const segments: SpeakerSegment[] = merged.blocks.map((block, i) => {
+      const label = merged.labels[i] ?? `Speech ${i + 1}`
       const side = getSideForLabel(label)
       return blockToSegment(block, `${label} (${side})`)
     })
 
-    const confidence: 'high' | 'low' = trimmedLabels.length === APDA_EXPECTED_SPEECHES ? 'high' : 'low'
-    console.log(`[diarization] Final: ${trimmedLabels.join(', ')} (confidence: ${confidence})`)
-    return { segments, confidence, detectedSpeechCount: trimmedLabels.length }
+    const confidence: 'high' | 'low' = merged.labels.length === APDA_EXPECTED_SPEECHES ? 'high' : 'low'
+    console.log(`[diarization] Final: ${merged.labels.join(', ')} (confidence: ${confidence})`)
+    return { segments, confidence, detectedSpeechCount: merged.labels.length }
   } catch (err) {
     // Propagate token exhaustion / config errors
     if (err instanceof LlmError && (err.kind === 'token_exhausted' || err.kind === 'config')) throw err

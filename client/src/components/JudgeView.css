@@ -39,7 +39,27 @@
   font-size: 15px;
   line-height: 170%;
   color: var(--text-h);
-  white-space: pre-wrap;
+}
+
+.rfd-block {
+  margin-bottom: 16px;
+
+  strong {
+    display: block;
+    font-size: 14px;
+    color: var(--text-h);
+    margin-bottom: 4px;
+  }
+
+  p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 160%;
+  }
+
+  &:last-child {
+    margin-bottom: 0;
+  }
 }
 
 .framework {

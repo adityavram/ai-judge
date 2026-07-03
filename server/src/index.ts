@@ -9,6 +9,7 @@ import flowRouter from './routes/flow.js'
 import judgeRouter from './routes/judge.js'
 import feedbackRouter from './routes/feedback.js'
 import pipelineRouter from './routes/pipeline.js'
+import cacheRouter from './routes/cache.js'
 import { rateLimit, requireClientId } from './rateLimit.js'
 
 // Prevent unhandled rejections from crashing the process
@@ -38,6 +39,7 @@ app.use('/api/transcript', rateLimit, transcriptRouter)
 app.use('/api/flow', requireClientId, flowRouter)
 app.use('/api/judge', requireClientId, judgeRouter)
 app.use('/api/feedback', feedbackRouter)
+app.use('/api/cache', cacheRouter)
 
 // Serve built client in production
 const clientDist = join(__dirname, '..', '..', 'client', 'dist')

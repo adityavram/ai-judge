@@ -90,13 +90,20 @@ export interface TeamFeedback {
   improvements: string[]
 }
 
+export interface RFDSection {
+  weighing: string
+  weighingComparison: string
+  whyWinnerWon: string
+  linkByLink: string
+}
+
 export interface JudgingResult {
   winner: 'Government' | 'Opposition'
   topic: string
   weighing: WeighingAnalysis
   clashVerdicts: ClashVerdict[]
   devilsAdvocatePositions: DevilsAdvocatePosition[]
-  rfd: string
+  rfd: RFDSection
   speakerScores: SpeakerScore[]
   governmentTeam: TeamFeedback
   oppositionTeam: TeamFeedback

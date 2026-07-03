@@ -102,13 +102,20 @@ export interface TeamFeedback {
   improvements: string[]
 }
 
+export interface RFDSection {
+  weighing: string
+  weighingComparison: string
+  whyWinnerWon: string
+  linkByLink: string
+}
+
 export interface JudgingResult {
   winner: 'Government' | 'Opposition'
   topic: string
   weighing: WeighingAnalysis
   clashVerdicts: ClashVerdict[]
   devilsAdvocatePositions: DevilsAdvocatePosition[]
-  rfd: string
+  rfd: RFDSection
   speakerScores: SpeakerScore[]
   governmentTeam: TeamFeedback
   oppositionTeam: TeamFeedback
@@ -128,11 +135,11 @@ export interface PipelineState {
 
 const MAX_POLL_RETRIES = 3
 
-export async function startPipeline(url: string, topic?: string): Promise<string> {
+export async function startPipeline(url: string, topic?: string, resumeFrom?: 'transcript' | 'flow' | 'judge'): Promise<string> {
   const res = await fetch(`${API_BASE}/api/pipeline`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ url, topic }),
+    body: JSON.stringify({ url, topic, resumeFrom }),
   })
   if (res.status === 429) throw new Error('Daily round limit reached. Please try again tomorrow.')
   if (res.status === 400) {
@@ -211,4 +218,43 @@ export async function submitFeedback(message: string, rating?: number, videoUrl?
     const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
     throw new Error(typeof body === 'object' && body.error ? body.error : `HTTP ${res.status}`)
   }
+}
+
+export interface CachedRoundSummary {
+  videoId: string
+  topic: string
+  hasTranscript: boolean
+  hasFlow: boolean
+  hasJudge: boolean
+  createdAt: string
+}
+
+export async function listCachedRounds(): Promise<CachedRoundSummary[]> {
+  const res = await fetch(`${API_BASE}/api/cache/rounds`, {
+    headers: authHeaders(),
+  })
+  if (!res.ok) return []
+  return res.json() as Promise<CachedRoundSummary[]>
+}
+
+export interface CachedRoundDetail {
+  videoId: string
+  topic: string
+  topicInferred: boolean
+  hasTranscript: boolean
+  hasFlow: boolean
+  hasJudge: boolean
+  createdAt: string
+  transcript: Transcript | null
+  flow: FlowSheet | null
+  judging: JudgingResult | null
+}
+
+export async function getCachedRound(videoId: string): Promise<CachedRoundDetail | null> {
+  const res = await fetch(`${API_BASE}/api/cache/rounds/${videoId}`, {
+    headers: authHeaders(),
+  })
+  if (res.status === 404) return null
+  if (!res.ok) return null
+  return res.json() as Promise<CachedRoundDetail>
 }

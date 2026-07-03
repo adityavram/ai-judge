@@ -6,21 +6,23 @@ import { generateFlowSheet } from '../flow.js'
 import { judgeRound } from '../judge.js'
 import { llmChat, LlmError, llmErrorToResponse } from '../llm.js'
 import { rateLimit, requireClientId } from '../rateLimit.js'
-import { getCachedTranscript, saveTranscriptCache } from '../db.js'
+import { getCachedTranscript, saveTranscriptCache, getCachedFlow, saveFlowCache, getCachedJudge, saveJudgeCache } from '../db.js'
 import type { CaptionSegment, Transcript, FlowSheet, JudgingResult } from '../types.js'
 
 const router = Router()
 
 const MAX_URL_LENGTH = 500
-const MAX_TOPIC_LENGTH = 300
+const MAX_TOPIC_LENGTH = 1000
 
 export type PipelineStatus = 'transcript' | 'flow' | 'judge' | 'done' | 'error'
+export type ResumeFrom = 'transcript' | 'flow' | 'judge'
 
 interface PipelineJob {
   id: string
   status: PipelineStatus
   url: string
   topic: string
+  videoId: string
   transcript: Transcript | null
   flow: FlowSheet | null
   judging: JudgingResult | null
@@ -78,33 +80,26 @@ async function fetchTranscriptData(videoId: string): Promise<{ text: string; off
   }
 }
 
-async function runPipeline(job: PipelineJob, url: string, topic?: string): Promise<void> {
+async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: ResumeFrom): Promise<void> {
   try {
     // Step 1: Transcript
-    job.status = 'transcript'
-    const videoId = extractVideoId(url)
-    if (!videoId) {
-      job.status = 'error'
-      job.errorStep = 'Transcript'
-      job.error = 'Could not extract video ID from URL'
-      return
+    const cachedTranscript = (resumeFrom !== 'transcript') ? getCachedTranscript(job.videoId) : null
+    if (cachedTranscript) {
+      console.log(`[pipeline:${job.id}] Cache hit for transcript`)
+      job.transcript = {
+        videoId: cachedTranscript.video_id,
+        rawSegments: JSON.parse(cachedTranscript.raw_segments),
+        segments: JSON.parse(cachedTranscript.segments),
+        segmentationConfidence: cachedTranscript.confidence as 'high' | 'low',
+        detectedSpeechCount: cachedTranscript.detected_speech_count,
+        topic: cachedTranscript.topic,
+        topicInferred: cachedTranscript.topic_inferred === 1,
+      }
     }
 
-    // Check cache first
-    const cached = getCachedTranscript(videoId)
-    if (cached) {
-      console.log(`[pipeline:${job.id}] Cache hit for video ${videoId}`)
-      job.transcript = {
-        videoId: cached.video_id,
-        rawSegments: JSON.parse(cached.raw_segments),
-        segments: JSON.parse(cached.segments),
-        segmentationConfidence: cached.confidence as 'high' | 'low',
-        detectedSpeechCount: cached.detected_speech_count,
-        topic: cached.topic,
-        topicInferred: cached.topic_inferred === 1,
-      }
-    } else {
-      const rawCaptions = await fetchTranscriptData(videoId)
+    if (!job.transcript) {
+      job.status = 'transcript'
+      const rawCaptions = await fetchTranscriptData(job.videoId)
 
       const captionSegments: CaptionSegment[] = rawCaptions.map((c) => ({
         text: c.text,
@@ -147,7 +142,7 @@ async function runPipeline(job: PipelineJob, url: string, topic?: string): Promi
       }
 
       job.transcript = {
-        videoId,
+        videoId: job.videoId,
         rawSegments: captionSegments,
         segments,
         segmentationConfidence: confidence,
@@ -156,10 +151,10 @@ async function runPipeline(job: PipelineJob, url: string, topic?: string): Promi
         topicInferred,
       }
 
-      // Save to cache (best-effort, don't fail pipeline if cache write fails)
+      // Cache transcript
       try {
         saveTranscriptCache(
-          videoId,
+          job.videoId,
           JSON.stringify(job.transcript.rawSegments),
           JSON.stringify(job.transcript.segments),
           job.transcript.segmentationConfidence,
@@ -167,21 +162,53 @@ async function runPipeline(job: PipelineJob, url: string, topic?: string): Promi
           job.transcript.topic,
           job.transcript.topicInferred,
         )
-        console.log(`[pipeline:${job.id}] Cached transcript for video ${videoId}`)
+        console.log(`[pipeline:${job.id}] Cached transcript for video ${job.videoId}`)
       } catch (cacheErr) {
         console.warn(`[pipeline:${job.id}] Failed to cache transcript:`, cacheErr instanceof Error ? cacheErr.message : cacheErr)
       }
     }
 
     // Step 2: Flow
-    job.status = 'flow'
-    console.log(`[pipeline:${job.id}] Generating flow...`)
-    job.flow = await generateFlowSheet(job.transcript.segments)
+    const cachedFlow = (resumeFrom !== 'transcript' && resumeFrom !== 'flow') ? getCachedFlow(job.videoId, job.transcript.topic) : null
+    if (cachedFlow) {
+      console.log(`[pipeline:${job.id}] Cache hit for flow`)
+      job.flow = JSON.parse(cachedFlow.flow)
+    }
+
+    if (!job.flow) {
+      job.status = 'flow'
+      console.log(`[pipeline:${job.id}] Generating flow...`)
+      job.flow = await generateFlowSheet(job.transcript.segments)
+
+      // Cache flow
+      try {
+        saveFlowCache(job.videoId, job.transcript.topic, JSON.stringify(job.flow))
+        console.log(`[pipeline:${job.id}] Cached flow for video ${job.videoId}`)
+      } catch (cacheErr) {
+        console.warn(`[pipeline:${job.id}] Failed to cache flow:`, cacheErr instanceof Error ? cacheErr.message : cacheErr)
+      }
+    }
 
     // Step 3: Judge
-    job.status = 'judge'
-    console.log(`[pipeline:${job.id}] Judging round...`)
-    job.judging = await judgeRound(job.flow, job.transcript.topic)
+    const cachedJudge = (!resumeFrom) ? getCachedJudge(job.videoId, job.transcript.topic) : null
+    if (cachedJudge) {
+      console.log(`[pipeline:${job.id}] Cache hit for judge`)
+      job.judging = JSON.parse(cachedJudge.result)
+    }
+
+    if (!job.judging) {
+      job.status = 'judge'
+      console.log(`[pipeline:${job.id}] Judging round...`)
+      job.judging = await judgeRound(job.flow, job.transcript.topic)
+
+      // Cache judge result
+      try {
+        saveJudgeCache(job.videoId, job.transcript.topic, JSON.stringify(job.judging))
+        console.log(`[pipeline:${job.id}] Cached judge result for video ${job.videoId}`)
+      } catch (cacheErr) {
+        console.warn(`[pipeline:${job.id}] Failed to cache judge result:`, cacheErr instanceof Error ? cacheErr.message : cacheErr)
+      }
+    }
 
     job.status = 'done'
     console.log(`[pipeline:${job.id}] Complete! Winner: ${job.judging.winner}`)
@@ -205,7 +232,7 @@ async function runPipeline(job: PipelineJob, url: string, topic?: string): Promi
 }
 
 router.post('/', rateLimit, async (req, res) => {
-  const { url, topic } = req.body as { url?: string; topic?: string }
+  const { url, topic, resumeFrom } = req.body as { url?: string; topic?: string; resumeFrom?: string }
 
   if (!url || typeof url !== 'string' || url.length > MAX_URL_LENGTH) {
     return res.status(400).json({ error: 'Valid YouTube URL required' })
@@ -213,6 +240,8 @@ router.post('/', rateLimit, async (req, res) => {
   if (topic && typeof topic === 'string' && topic.length > MAX_TOPIC_LENGTH) {
     return res.status(400).json({ error: 'Topic is too long' })
   }
+
+  const validResume = resumeFrom === 'transcript' || resumeFrom === 'flow' || resumeFrom === 'judge' ? resumeFrom : undefined
 
   const videoId = extractVideoId(url)
   if (!videoId) {
@@ -222,11 +251,17 @@ router.post('/', rateLimit, async (req, res) => {
   cleanupOldJobs()
 
   const id = randomUUID()
+  const initialStatus = validResume === 'transcript' ? 'transcript'
+    : validResume === 'flow' ? 'flow'
+    : validResume === 'judge' ? 'judge'
+    : 'transcript'
+
   const job: PipelineJob = {
     id,
-    status: 'transcript',
+    status: initialStatus,
     url,
     topic: topic ?? '',
+    videoId,
     transcript: null,
     flow: null,
     judging: null,
@@ -236,8 +271,8 @@ router.post('/', rateLimit, async (req, res) => {
   }
   jobs.set(id, job)
 
-  console.log(`[pipeline:${id}] Started for video ${videoId}`)
-  runPipeline(job, url, topic).catch((err) => {
+  console.log(`[pipeline:${id}] Started for video ${videoId}${validResume ? ` (resume from ${validResume})` : ''}`)
+  runPipeline(job, topic || undefined, validResume as ResumeFrom | undefined).catch((err) => {
     console.error(`[pipeline:${id}] Unhandled error:`, err)
   })
 

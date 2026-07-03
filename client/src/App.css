@@ -63,3 +63,27 @@
   background: var(--border);
   margin: 24px 0;
 }
+
+.regenerate-btn {
+  display: block;
+  margin: 12px auto 0;
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+
+  &:hover:not(:disabled) {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}

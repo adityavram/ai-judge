@@ -6,6 +6,7 @@ import { TranscriptView } from './components/TranscriptView'
 import { FlowView } from './components/FlowView'
 import { JudgeView } from './components/JudgeView'
 import { FeedbackButton } from './components/FeedbackButton'
+import { HistoryPanel } from './components/HistoryPanel'
 import { startPipeline, pollPipeline, submitFeedback, type PipelineState } from './api/client'
 import type { Transcript, FlowSheet, JudgingResult } from './api/client'
 import './App.css'
@@ -56,21 +57,37 @@ function App() {
   const [errors, setErrors] = useState<{ step: string; message: string }[]>([])
   const [lastUrl, setLastUrl] = useState('')
 
-  const runPipeline = async (url: string, topic: string) => {
+  const runPipeline = async (url: string, topic: string, resumeFrom?: 'transcript' | 'flow' | 'judge') => {
     setLastUrl(url)
-    setPipelineStep('transcript')
-    setTranscript(null)
-    setFlow(null)
-    setJudging(null)
-    setErrors([])
+    if (!resumeFrom) {
+      setPipelineStep('transcript')
+      setTranscript(null)
+      setFlow(null)
+      setJudging(null)
+      setErrors([])
+    } else if (resumeFrom === 'transcript') {
+      setPipelineStep('transcript')
+      setTranscript(null)
+      setFlow(null)
+      setJudging(null)
+      setErrors([])
+    } else if (resumeFrom === 'flow') {
+      setPipelineStep('flow')
+      setFlow(null)
+      setJudging(null)
+      setErrors([])
+    } else if (resumeFrom === 'judge') {
+      setPipelineStep('judge')
+      setJudging(null)
+      setErrors([])
+    }
 
     try {
-      const jobId = await startPipeline(url, topic || undefined)
+      const jobId = await startPipeline(url, topic || undefined, resumeFrom)
 
       while (true) {
         const state = await pollPipeline(jobId)
 
-        // Update step indicator
         if (state.status === 'transcript') setPipelineStep('transcript')
         else if (state.status === 'flow') setPipelineStep('flow')
         else if (state.status === 'judge') setPipelineStep('judge')
@@ -80,7 +97,6 @@ function App() {
           setPipelineStep('error')
         }
 
-        // Show partial results as they arrive
         if (state.transcript) setTranscript(state.transcript)
         if (state.flow) setFlow(state.flow)
         if (state.judging) setJudging(state.judging)
@@ -102,11 +118,21 @@ function App() {
     await submitFeedback(message, rating || undefined, lastUrl || undefined)
   }
 
+  const handleCachedRound = (_videoId: string, _topic: string, cachedTranscript: Transcript | null, cachedFlow: FlowSheet | null, cachedJudging: JudgingResult | null) => {
+    setLastUrl(`https://youtube.com/watch?v=${_videoId}`)
+    setPipelineStep('done')
+    setTranscript(cachedTranscript)
+    setFlow(cachedFlow)
+    setJudging(cachedJudging)
+    setErrors([])
+  }
+
   const busy = pipelineStep !== 'idle' && pipelineStep !== 'done' && pipelineStep !== 'error'
 
   return (
     <div className="app">
       <FeedbackButton onSubmit={handleFeedback} />
+      <HistoryPanel onSelect={handleCachedRound} />
       <header className="app-header">
         <h1>AI Judge</h1>
         <p>Enter a debate round URL to get an AI-generated decision</p>
@@ -129,20 +155,50 @@ function App() {
         {pipelineStep === 'done' && judging && (
           <>
             <JudgeView result={judging} />
+            <button
+              className="regenerate-btn"
+              onClick={() => runPipeline(lastUrl, '', 'judge')}
+              disabled={busy}
+            >
+              Re-judge Round
+            </button>
             <div className="section-divider" />
           </>
         )}
 
         {flow && pipelineStep !== 'idle' && (
-          <Collapsible title="Flow" badge={`${flow.clashes.length} clashes`} defaultOpen={false}>
-            <FlowView flow={flow} />
-          </Collapsible>
+          <>
+            <Collapsible title="Flow" badge={`${flow.clashes.length} clashes`} defaultOpen={false}>
+              <FlowView flow={flow} />
+            </Collapsible>
+            {pipelineStep === 'done' && (
+              <button
+                className="regenerate-btn"
+                onClick={() => runPipeline(lastUrl, '', 'flow')}
+                disabled={busy}
+              >
+                Regenerate Flow
+              </button>
+            )}
+            <div className="section-divider" />
+          </>
         )}
 
         {transcript && pipelineStep !== 'idle' && (
-          <Collapsible title="Transcript" badge={`${transcript.segments.length} speeches`} defaultOpen={false}>
-            <TranscriptView transcript={transcript} />
-          </Collapsible>
+          <>
+            <Collapsible title="Transcript" badge={`${transcript.segments.length} speeches`} defaultOpen={false}>
+              <TranscriptView transcript={transcript} />
+            </Collapsible>
+            {pipelineStep === 'done' && (
+              <button
+                className="regenerate-btn"
+                onClick={() => runPipeline(lastUrl, '', 'transcript')}
+                disabled={busy}
+              >
+                Repull Transcript
+              </button>
+            )}
+          </>
         )}
       </main>
     </div>

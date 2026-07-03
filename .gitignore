@@ -25,3 +25,4 @@ dist-ssr
 *.sw?
 .Rhistory
 *.pdf
+server/data/feedback.db

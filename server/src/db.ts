@@ -10,7 +10,6 @@ let db: Database.Database | null = null
 
 function getDb(): Database.Database {
   if (!db) {
-    // Ensure the data directory exists
     const dbDir = dirname(DB_PATH)
     if (!existsSync(dbDir)) {
       mkdirSync(dbDir, { recursive: true })
@@ -38,6 +37,24 @@ function getDb(): Database.Database {
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       )
     `)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS flow_cache (
+        video_id TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        flow TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (video_id, topic)
+      )
+    `)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS judge_cache (
+        video_id TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        result TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY (video_id, topic)
+      )
+    `)
   }
   return db
 }
@@ -59,6 +76,20 @@ export interface TranscriptCacheRow {
   detected_speech_count: number
   topic: string
   topic_inferred: number
+  created_at: string
+}
+
+export interface FlowCacheRow {
+  video_id: string
+  topic: string
+  flow: string
+  created_at: string
+}
+
+export interface JudgeCacheRow {
+  video_id: string
+  topic: string
+  result: string
   created_at: string
 }
 
@@ -84,6 +115,7 @@ export function getFeedbackCount(): number {
   return row.count
 }
 
+// Transcript cache
 export function getCachedTranscript(videoId: string): TranscriptCacheRow | null {
   const db = getDb()
   return db.prepare('SELECT * FROM transcript_cache WHERE video_id = ?').get(videoId) as TranscriptCacheRow | null
@@ -103,4 +135,66 @@ export function saveTranscriptCache(
     INSERT OR REPLACE INTO transcript_cache (video_id, raw_segments, segments, confidence, detected_speech_count, topic, topic_inferred)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(videoId, rawSegments, segments, confidence, detectedSpeechCount, topic, topicInferred ? 1 : 0)
+}
+
+// Flow cache
+export function getCachedFlow(videoId: string, topic: string): FlowCacheRow | null {
+  const db = getDb()
+  return db.prepare('SELECT * FROM flow_cache WHERE video_id = ? AND topic = ?').get(videoId, topic) as FlowCacheRow | null
+}
+
+export function saveFlowCache(videoId: string, topic: string, flow: string): void {
+  const db = getDb()
+  db.prepare(`
+    INSERT OR REPLACE INTO flow_cache (video_id, topic, flow)
+    VALUES (?, ?, ?)
+  `).run(videoId, topic, flow)
+}
+
+// Judge cache
+export function getCachedJudge(videoId: string, topic: string): JudgeCacheRow | null {
+  const db = getDb()
+  return db.prepare('SELECT * FROM judge_cache WHERE video_id = ? AND topic = ?').get(videoId, topic) as JudgeCacheRow | null
+}
+
+export function saveJudgeCache(videoId: string, topic: string, result: string): void {
+  const db = getDb()
+  db.prepare(`
+    INSERT OR REPLACE INTO judge_cache (video_id, topic, result)
+    VALUES (?, ?, ?)
+  `).run(videoId, topic, result)
+}
+
+export interface CachedRound {
+  videoId: string
+  topic: string
+  hasTranscript: boolean
+  hasFlow: boolean
+  hasJudge: boolean
+  createdAt: string
+}
+
+export function listCachedRounds(): CachedRound[] {
+  const db = getDb()
+  const rows = db.prepare(`
+    SELECT
+      t.video_id,
+      t.topic,
+      t.created_at,
+      CASE WHEN f.video_id IS NOT NULL THEN 1 ELSE 0 END AS has_flow,
+      CASE WHEN j.video_id IS NOT NULL THEN 1 ELSE 0 END AS has_judge
+    FROM transcript_cache t
+    LEFT JOIN flow_cache f ON t.video_id = f.video_id AND t.topic = f.topic
+    LEFT JOIN judge_cache j ON t.video_id = j.video_id AND t.topic = j.topic
+    ORDER BY t.created_at DESC
+  `).all() as Array<{ video_id: string; topic: string; created_at: string; has_flow: number; has_judge: number }>
+
+  return rows.map((row) => ({
+    videoId: row.video_id,
+    topic: row.topic,
+    hasTranscript: true,
+    hasFlow: row.has_flow === 1,
+    hasJudge: row.has_judge === 1,
+    createdAt: row.created_at,
+  }))
 }

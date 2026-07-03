@@ -1,11 +1,19 @@
-import type { FlowSheet, JudgingResult, WeighingAnalysis, ClashVerdict, DevilsAdvocatePosition, SpeakerScore, TeamFeedback } from './types.js'
-import { llmChat, llmJSON } from './llm.js'
+import type { FlowSheet, JudgingResult, WeighingAnalysis, ClashVerdict, DevilsAdvocatePosition, SpeakerScore, TeamFeedback, RFDSection } from './types.js'
+import { llmJSON } from './llm.js'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const speaksGuide = readFileSync(join(__dirname, '..', 'speaks-guide.md'), 'utf-8')
+
+const APDA_TECH_OVER_TRUTH = `APDA follows TECH OVER TRUTH: an argument made in a constructive speech (PMC, LOC, MG, MO) is treated as TRUE in later speeches unless it is directly answered by the opposing team. This means:
+- If PMC makes a claim with ANY warrant, it is true in PMR unless LOC/MO answers it — even if the warrant is thin.
+- If LOC makes a claim with any warrant, it is true in LOR unless PMC/MG answers it — even if the warrant is thin.
+- "Under-substantiated" is NOT a valid reason to discount an argument that was never answered. If the other team didn't respond, the argument stands.
+- The ONLY way to defeat an argument is to directly engage it. Ignoring it concedes it.
+- Reply speeches (PMR, LOR) may crystallize and weigh existing arguments but may NOT introduce new ones.
+- Evaluate arguments based on whether they were ANSWERED, not on how "well-substantiated" they are in isolation.`
 
 function flowToText(flow: FlowSheet): string {
   return flow.clashes
@@ -21,6 +29,8 @@ function flowToText(flow: FlowSheet): string {
 // Step 1: Weighing analysis
 async function analyzeWeighing(flow: FlowSheet, topic: string): Promise<WeighingAnalysis> {
   const system = `You are an expert APDA debate judge. You are given a flow sheet from a debate round. Your task is to analyze the weighing — what issues matter most in this round and why.
+
+${APDA_TECH_OVER_TRUTH}
 
 Identify the 2-4 key issues that will decide this round. For each, explain:
 - What the issue is
@@ -64,11 +74,15 @@ ${flowToText(flow)}`
 async function evaluateClashes(flow: FlowSheet, topic: string, weighing: WeighingAnalysis): Promise<ClashVerdict[]> {
   const system = `You are an expert APDA debate judge. Given a flow sheet and weighing analysis, evaluate each clash point and determine who won it.
 
+${APDA_TECH_OVER_TRUTH}
+
 For each clash:
 - Determine the winner (Government, Opposition, or Tie)
 - Explain the reasoning (which args were stronger, what was dropped, which links were conceded)
 - Note the key arguments that decided the clash
 - IMPORTANT: Identify any arguments from PMR or LOR that appear to be NEW (not referenced or foreshadowed in earlier speeches). In APDA, reply speeches may only crystallize and weigh — they may NOT introduce new arguments. Flag suspected new arguments as "newArgs" and discount them heavily in your evaluation.
+
+CRITICAL: Evaluate EACH clash independently on its own merits. It is COMMON and EXPECTED for different clashes to be won by different sides. A round is not a sweep — most rounds have clashes on both sides. Do NOT default to giving all clashes to the same team. If the Opposition won a clash on their own terms, say so. If the Government won a clash on their own terms, say so. Ties are also valid when neither side clearly wins.
 
 Use the weighing analysis to prioritize which arguments matter most within each clash.
 
@@ -169,36 +183,47 @@ ${flowToText(flow)}`
   return parsed.positions
 }
 
-// Step 4: Write RFD that beats the devil's advocate positions
+// Step 4: Write structured RFD
 async function writeRFD(
   flow: FlowSheet,
   topic: string,
   weighing: WeighingAnalysis,
   clashVerdicts: ClashVerdict[],
   provisionalWinner: 'Government' | 'Opposition',
-  devilsAdvocate: DevilsAdvocatePosition[],
-): Promise<string> {
+): Promise<RFDSection> {
+  const losingSide = provisionalWinner === 'Government' ? 'Opposition' : 'Government'
+
   const system = `You are an expert APDA debate judge writing the Reason for Decision (RFD).
 
-The provisional winner is ${provisionalWinner}. Multiple devil's advocate positions have been raised arguing for the losing side. Your job is to write a clear, decisive RFD that:
+${APDA_TECH_OVER_TRUTH}
 
-1. States the winner and the core reason
-2. Addresses EACH devil's advocate position — explain why the winner's case overcomes it
-3. References specific clashes, arguments, and weighing from the round
-4. Is concise but thorough (3-5 paragraphs)
+The winner is ${provisionalWinner}. Write a structured RFD with exactly these 4 sections. Do NOT repeat devil's advocate arguments — those are shown separately. Focus on YOUR decision and why you reached it.
+
+Sections:
+1. "weighing": What is the winning team's weighing in this round? What metric/scope did they win on? (2-3 sentences)
+2. "weighingComparison": Why does the winning team's weighing matter more than the losing team's weighing? How did the winning team out-weigh? (2-3 sentences)
+3. "whyWinnerWon": Why did ${provisionalWinner} win this round? The core thesis of the decision. (2-3 sentences, be specific about key arguments)
+4. "linkByLink": For each clash that ${provisionalWinner} won, briefly explain which links held and which ${losingSide} links fell. If ${losingSide} won any clashes, explain why those weren't enough to win the round. (1-2 sentences per clash)
 
 IMPORTANT RULES FOR REPLY SPEECHES (PMR and LOR):
 - In APDA, reply speeches may ONLY crystallize, weigh, and summarize. They may NOT introduce new arguments.
-- If the clash verdicts flagged suspected NEW arguments from PMR or LOR (arguments not foreshadowed or referenced in earlier speeches), you MUST explicitly call them out in the RFD.
-- New arguments from reply speeches should be discounted or ignored in your decision — they are not legitimate grounds for winning a clash.
-- When evaluating whether a reply speech argument is "new," consider: was this specific claim, link, or impact introduced in a prior constructive/rebuttal? If the earlier speeches only vaguely alluded to the idea but the reply speech develops it into a full argument, that development is still new.
+- If clash verdicts flagged NEW arguments from PMR or LOR, call them out in the relevant section.
+- New arguments from reply speeches should be discounted — they are not legitimate grounds for winning.
 - Credit prior speeches for arguments they actually made, but be skeptical of reply speeches claiming credit for arguments that weren't clearly articulated earlier.
 
-Write in the voice of an experienced debate judge giving an oral RFD. Be direct and specific — reference actual arguments from the flow, not vague generalities.`
+Be direct and specific — reference actual arguments from the flow, not vague generalities.
+
+Respond with ONLY valid JSON:
+{
+  "weighing": "...",
+  "weighingComparison": "...",
+  "whyWinnerWon": "...",
+  "linkByLink": "..."
+}`
 
   const user = `Topic: ${topic}
-
-Provisional winner: ${provisionalWinner}
+Winner: ${provisionalWinner}
+Losing side: ${losingSide}
 
 Weighing analysis:
 ${JSON.stringify(weighing, null, 2)}
@@ -206,23 +231,21 @@ ${JSON.stringify(weighing, null, 2)}
 Clash verdicts:
 ${JSON.stringify(clashVerdicts, null, 2)}
 
-Devil's advocate positions to overcome:
-${devilsAdvocate.map((d, i) => `${i + 1}. [${d.label}] ${d.argument}\n   Why it could win: ${d.whyItCouldWin}`).join('\n\n')}
-
 Flow sheet:
 ${flowToText(flow)}`
 
-  const response = await llmChat({
+  const parsed = await llmJSON({
     messages: [
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
+    format: 'json',
     temperature: 0.3,
     label: 'judge:rfd',
-  })
+  }) as RFDSection
 
   console.log('[judge] Step 4: RFD written')
-  return response.content.trim()
+  return parsed
 }
 
 // Step 5: Assign speaks and ranks
@@ -231,9 +254,11 @@ async function assignSpeaks(
   topic: string,
   clashVerdicts: ClashVerdict[],
   winner: 'Government' | 'Opposition',
-  rfd: string,
+  rfd: RFDSection,
 ): Promise<SpeakerScore[]> {
   const system = `You are an expert APDA debate judge assigning speaker scores and ranks.
+
+${APDA_TECH_OVER_TRUTH}
 
 APDA Speaker Scale Reference:
 ${speaksGuide}
@@ -287,7 +312,10 @@ Respond with ONLY valid JSON:
 Winner: ${winner}
 
 RFD:
-${rfd}
+Weighing: ${rfd.weighing}
+Why this weighing outweighs: ${rfd.weighingComparison}
+Why ${winner} won: ${rfd.whyWinnerWon}
+Link-by-link: ${rfd.linkByLink}
 
 Clash verdicts:
 ${JSON.stringify(clashVerdicts, null, 2)}
@@ -363,7 +391,7 @@ async function generateFeedback(
   clashVerdicts: ClashVerdict[],
   speakerScores: SpeakerScore[],
   winner: 'Government' | 'Opposition',
-  rfd: string,
+  rfd: RFDSection,
 ): Promise<{ governmentTeam: TeamFeedback; oppositionTeam: TeamFeedback }> {
   const govScores = speakerScores.filter((s) => s.side === 'Government')
   const oppScores = speakerScores.filter((s) => s.side === 'Opposition')
@@ -394,7 +422,10 @@ Respond with ONLY valid JSON:
   const user = `Winner: ${winner}
 
 RFD:
-${rfd}
+Weighing: ${rfd.weighing}
+Why this weighing outweighs: ${rfd.weighingComparison}
+Why ${winner} won: ${rfd.whyWinnerWon}
+Link-by-link: ${rfd.linkByLink}
 
 Clash verdicts:
 ${JSON.stringify(clashVerdicts, null, 2)}
@@ -437,7 +468,7 @@ export async function judgeRound(flow: FlowSheet, topic: string): Promise<Judgin
   const devilsAdvocate = await generateDevilsAdvocate(flow, topic, weighing, clashVerdicts, provisionalWinner)
 
   // Step 4: Write RFD
-  const rfd = await writeRFD(flow, topic, weighing, clashVerdicts, provisionalWinner, devilsAdvocate)
+  const rfd = await writeRFD(flow, topic, weighing, clashVerdicts, provisionalWinner)
 
   // Step 5: Assign speaks
   const speakerScores = await assignSpeaks(flow, topic, clashVerdicts, provisionalWinner, rfd)

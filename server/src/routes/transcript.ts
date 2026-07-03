@@ -8,7 +8,7 @@ import type { CaptionSegment, Transcript } from '../types.js'
 const router = Router()
 
 const MAX_URL_LENGTH = 500
-const MAX_TOPIC_LENGTH = 300
+const MAX_TOPIC_LENGTH = 1000
 
 async function inferTopic(text: string): Promise<string> {
   const sampleText = text.slice(0, 3000)
