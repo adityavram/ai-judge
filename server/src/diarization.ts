@@ -433,6 +433,14 @@ IMPORTANT DURATION GUIDANCE:
 - If a block is 15+ minutes, it likely contains MULTIPLE speeches and was split incorrectly — flag this in your response
 - If a block is under 1 minute, it may be a moderator intro or pleasantries — not a real speech
 
+CRITICAL — NON-DEBATE BLOCKS:
+- There should be exactly 6 speeches in an APDA round. If there are more than 6 blocks, the extras are likely:
+  - Moderator introductions, announcements, or judge feedback
+  - Audience reactions or applause
+  - Post-round discussion or voting
+- Label any block that is NOT a debate speech as "SKIP"
+- Signs a block should be SKIP: it doesn't argue for or against the motion, it's audience/moderator talk, or it happens after the debate speeches end
+
 Pay close attention to:
 - Does the speaker say "we" referring to government or opposition?
 - Is the speaker defending or attacking the motion?
@@ -499,6 +507,21 @@ export async function assignSpeakers(captions: CaptionSegment[], topic?: string)
     if (labels.length !== blocks.length) {
       console.warn(`[diarization] LLM returned ${labels.length} labels for ${blocks.length} blocks — using deterministic labels`)
       labels = blocks.map((_, i) => APDA_SPEECHES[i]?.label ?? `Speech ${i + 1}`)
+    }
+
+    // Filter out SKIP-labeled blocks (non-debate content)
+    const skipIndices = new Set<number>()
+    for (let i = 0; i < labels.length; i++) {
+      if (labels[i] === 'SKIP') {
+        console.log(`[diarization] Skipping non-debate block ${i + 1} (${(blockDuration(blocks[i]) / 60).toFixed(1)}min)`)
+        skipIndices.add(i)
+      }
+    }
+    if (skipIndices.size > 0) {
+      const filteredBlocks = blocks.filter((_, i) => !skipIndices.has(i))
+      const filteredLabels = labels.filter((_, i) => !skipIndices.has(i))
+      blocks = filteredBlocks
+      labels = filteredLabels
     }
 
     // Trim pleasantries from each block
