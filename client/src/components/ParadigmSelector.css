@@ -61,29 +61,7 @@
   line-height: 1.4;
 }
 
-.paradigm-actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 6px;
-}
-
-.paradigm-copy-btn {
-  padding: 3px 8px;
-  font-size: 11px;
-  color: var(--accent);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.paradigm-copy-btn:hover {
-  background: rgba(30, 58, 138, 0.05);
-}
-
-.paradigm-editor {
+.paradigm-error {
   margin-top: 8px;
   padding: 16px;
   border: 2px solid var(--accent);
@@ -145,6 +123,14 @@
   color: #ef4444;
   font-size: 13px;
   margin-bottom: 8px;
+}
+
+.paradigm-editor {
+  margin-top: 8px;
+  padding: 16px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  background: var(--bg);
 }
 
 .paradigm-save-btn {

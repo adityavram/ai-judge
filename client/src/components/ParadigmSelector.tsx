@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { listParadigms, createParadigm, deleteParadigm, type Paradigm, type ParadigmList } from '../api/client'
+import { listParadigms, createParadigm, deleteParadigm, type ParadigmList } from '../api/client'
 import './ParadigmSelector.css'
 
 interface ParadigmSelectorProps {
@@ -32,14 +32,6 @@ export function ParadigmSelector({ selected, onSelect }: ParadigmSelectorProps) 
     setEditName('')
     setEditDesc('')
     setEditPrompt(paradigms.builtin[0]?.prompt ?? '')
-    setError(null)
-  }
-
-  const startFromBuiltin = (p: Paradigm) => {
-    setEditing(true)
-    setEditName(p.name + ' (custom)')
-    setEditDesc(p.description)
-    setEditPrompt(p.prompt)
     setError(null)
   }
 
@@ -137,13 +129,6 @@ export function ParadigmSelector({ selected, onSelect }: ParadigmSelectorProps) 
       {selectedParadigm && (
         <div className="paradigm-desc">{selectedParadigm.description}</div>
       )}
-      <div className="paradigm-actions">
-        {paradigms.builtin.map((p) => (
-          <button key={`copy-${p.id}`} className="paradigm-copy-btn" onClick={() => startFromBuiltin(p)}>
-            Copy &ldquo;{p.name}&rdquo; as custom
-          </button>
-        ))}
-      </div>
     </div>
   )
 }
