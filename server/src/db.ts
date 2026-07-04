@@ -71,9 +71,40 @@ function getDb(): Database.Database {
       CREATE TABLE IF NOT EXISTS judge_cache (
         video_id TEXT NOT NULL,
         topic TEXT NOT NULL,
+        paradigm_id TEXT NOT NULL DEFAULT 'tech-over-truth',
         result TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
-        PRIMARY KEY (video_id, topic)
+        PRIMARY KEY (video_id, topic, paradigm_id)
+      )
+    `)
+
+    // Migration: if judge_cache exists without paradigm_id column, recreate it
+    const judgeCols = db.prepare("PRAGMA table_info(judge_cache)").all() as Array<{ name: string }>
+    if (!judgeCols.some((c) => c.name === 'paradigm_id')) {
+      console.log('[db] Migrating judge_cache: adding paradigm_id column...')
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS judge_cache_new (
+          video_id TEXT NOT NULL,
+          topic TEXT NOT NULL,
+          paradigm_id TEXT NOT NULL DEFAULT 'tech-over-truth',
+          result TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (video_id, topic, paradigm_id)
+        )
+      `)
+      db.exec(`INSERT OR IGNORE INTO judge_cache_new (video_id, topic, paradigm_id, result, created_at) SELECT video_id, topic, 'tech-over-truth', result, created_at FROM judge_cache`)
+      db.exec(`DROP TABLE judge_cache`)
+      db.exec(`ALTER TABLE judge_cache_new RENAME TO judge_cache`)
+      console.log('[db] judge_cache migration complete')
+    }
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS custom_paradigms (
+        id TEXT PRIMARY KEY,
+        client_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        prompt TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
       )
     `)
   }
@@ -116,7 +147,17 @@ export interface FlowCacheRow {
 export interface JudgeCacheRow {
   video_id: string
   topic: string
+  paradigm_id: string
   result: string
+  created_at: string
+}
+
+export interface CustomParadigmRow {
+  id: string
+  client_id: string
+  name: string
+  description: string
+  prompt: string
   created_at: string
 }
 
@@ -192,18 +233,18 @@ export function saveFlowCache(videoId: string, topic: string, flow: string): voi
   `).run(videoId, topic, flow)
 }
 
-// Judge cache
-export function getCachedJudge(videoId: string, topic: string): JudgeCacheRow | null {
+// Judge cache (keyed by video_id + topic + paradigm_id)
+export function getCachedJudge(videoId: string, topic: string, paradigmId: string): JudgeCacheRow | null {
   const db = getDb()
-  return db.prepare('SELECT * FROM judge_cache WHERE video_id = ? AND topic = ?').get(videoId, topic) as JudgeCacheRow | null
+  return db.prepare('SELECT * FROM judge_cache WHERE video_id = ? AND topic = ? AND paradigm_id = ?').get(videoId, topic, paradigmId) as JudgeCacheRow | null
 }
 
-export function saveJudgeCache(videoId: string, topic: string, result: string): void {
+export function saveJudgeCache(videoId: string, topic: string, paradigmId: string, result: string): void {
   const db = getDb()
   db.prepare(`
-    INSERT OR REPLACE INTO judge_cache (video_id, topic, result)
-    VALUES (?, ?, ?)
-  `).run(videoId, topic, result)
+    INSERT OR REPLACE INTO judge_cache (video_id, topic, paradigm_id, result)
+    VALUES (?, ?, ?, ?)
+  `).run(videoId, topic, paradigmId, result)
 }
 
 export interface CachedRound {
@@ -238,4 +279,29 @@ export function listCachedRounds(): CachedRound[] {
     hasJudge: row.has_judge === 1,
     createdAt: row.created_at,
   }))
+}
+
+// Custom paradigm CRUD
+export function getCustomParadigms(clientId: string): CustomParadigmRow[] {
+  const db = getDb()
+  return db.prepare('SELECT * FROM custom_paradigms WHERE client_id = ? ORDER BY created_at DESC').all(clientId) as CustomParadigmRow[]
+}
+
+export function getCustomParadigm(id: string): CustomParadigmRow | null {
+  const db = getDb()
+  return db.prepare('SELECT * FROM custom_paradigms WHERE id = ?').get(id) as CustomParadigmRow | null
+}
+
+export function saveCustomParadigm(id: string, clientId: string, name: string, description: string, prompt: string): void {
+  const db = getDb()
+  db.prepare(`
+    INSERT OR REPLACE INTO custom_paradigms (id, client_id, name, description, prompt)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(id, clientId, name, description, prompt)
+}
+
+export function deleteCustomParadigm(id: string, clientId: string): boolean {
+  const db = getDb()
+  const result = db.prepare('DELETE FROM custom_paradigms WHERE id = ? AND client_id = ?').run(id, clientId)
+  return result.changes > 0
 }

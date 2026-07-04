@@ -15,6 +15,7 @@ import { existsSync } from 'fs'
 import pipelineRouter from './routes/pipeline.js'
 import feedbackRouter from './routes/feedback.js'
 import cacheRouter from './routes/cache.js'
+import paradigmsRouter from './routes/paradigms.js'
 
 // Prevent unhandled rejections from crashing the process
 process.on('unhandledRejection', (reason) => {
@@ -40,6 +41,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/pipeline', pipelineRouter)
 app.use('/api/feedback', feedbackRouter)
 app.use('/api/cache', cacheRouter)
+app.use('/api/paradigms', paradigmsRouter)
 
 // Serve built client in production
 const clientDist = join(__dirname, '..', '..', 'client', 'dist')

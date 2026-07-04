@@ -17,6 +17,7 @@ import { FlowView } from './components/FlowView'
 import { JudgeView } from './components/JudgeView'
 import { FeedbackButton } from './components/FeedbackButton'
 import { HistoryPanel } from './components/HistoryPanel'
+import { ParadigmSelector } from './components/ParadigmSelector'
 import { startPipeline, pollPipeline, submitFeedback, type PipelineState } from './api/client'
 import type { Transcript, FlowSheet, JudgingResult } from './api/client'
 import './App.css'
@@ -69,6 +70,7 @@ function App() {
   const [judging, setJudging] = useState<JudgingResult | null>(null)
   const [errors, setErrors] = useState<{ step: string; message: string }[]>([])
   const [lastUrl, setLastUrl] = useState('')
+  const [selectedParadigm, setSelectedParadigm] = useState<string>('tech-over-truth')
 
   const runPipeline = async (url: string, topic: string, resumeFrom?: 'transcript' | 'diarize' | 'flow' | 'judge') => {
     setLastUrl(url)
@@ -101,7 +103,7 @@ function App() {
     }
 
     try {
-      const jobId = await startPipeline(url, topic || undefined, resumeFrom)
+      const jobId = await startPipeline(url, topic || undefined, resumeFrom, selectedParadigm)
 
       while (true) {
         const state = await pollPipeline(jobId)
@@ -151,7 +153,7 @@ function App() {
   return (
     <div className="app">
       <FeedbackButton onSubmit={handleFeedback} />
-      <HistoryPanel onSelect={handleCachedRound} />
+        <HistoryPanel onSelect={handleCachedRound} paradigmId={selectedParadigm} />
       <header className="app-header">
         <h1>AI Judge</h1>
         <p>Enter a debate round URL to get an AI-generated decision</p>
@@ -159,6 +161,10 @@ function App() {
 
       <main className="app-main">
         <UrlInput onSubmit={runPipeline} loading={busy} />
+
+        {pipelineStep === 'idle' && (
+          <ParadigmSelector selected={selectedParadigm} onSelect={setSelectedParadigm} />
+        )}
 
         {pipelineStep !== 'idle' && (
           <ProgressPipeline currentStep={pipelineStep} errors={errors} />
@@ -174,6 +180,7 @@ function App() {
         {pipelineStep === 'done' && judging && (
           <>
             <JudgeView result={judging} />
+            <ParadigmSelector selected={selectedParadigm} onSelect={setSelectedParadigm} />
             <button
               className="regenerate-btn"
               onClick={() => runPipeline(lastUrl, '', 'judge')}

@@ -1,0 +1,182 @@
+.paradigm-selector {
+  max-width: 600px;
+  margin: 16px auto 0;
+}
+
+.paradigm-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+  margin-bottom: 8px;
+}
+
+.paradigm-cards {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.paradigm-card {
+  position: relative;
+  flex: 1;
+  min-width: 140px;
+  padding: 12px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.paradigm-card:hover {
+  border-color: var(--accent);
+  background: rgba(30, 58, 138, 0.03);
+}
+
+.paradigm-card.selected {
+  border-color: var(--accent);
+  background: rgba(30, 58, 138, 0.08);
+}
+
+.paradigm-card-add {
+  border-style: dashed;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.paradigm-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-h);
+  margin-bottom: 4px;
+}
+
+.paradigm-card-desc {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.paradigm-delete-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  border-radius: 4px;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+
+.paradigm-delete-btn:hover {
+  opacity: 1;
+  color: #ef4444;
+}
+
+.paradigm-copy-btn {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.paradigm-copy-btn:hover {
+  background: rgba(30, 58, 138, 0.05);
+}
+
+.paradigm-editor {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 16px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.paradigm-editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.paradigm-editor-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-h);
+}
+
+.paradigm-cancel-btn {
+  padding: 4px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.paradigm-field {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.paradigm-field input,
+.paradigm-field textarea {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  box-sizing: border-box;
+}
+
+.paradigm-field textarea {
+  font-family: inherit;
+  resize: vertical;
+}
+
+.paradigm-error {
+  color: #ef4444;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.paradigm-save-btn {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.paradigm-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

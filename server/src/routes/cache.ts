@@ -42,11 +42,12 @@ router.get('/rounds', (_req, res) => {
 // Public: load a full cached round by video ID
 router.get('/rounds/:videoId', (req, res) => {
   const videoId = req.params.videoId
+  const paradigmId = (req.query.paradigm as string) || 'tech-over-truth'
   const transcript = getCachedTranscript(videoId)
   if (!transcript) return res.status(404).json({ error: 'Not found' })
 
   const flow = getCachedFlow(videoId, transcript.topic)
-  const judge = getCachedJudge(videoId, transcript.topic)
+  const judge = getCachedJudge(videoId, transcript.topic, paradigmId)
   const rawTranscript = getCachedRawTranscript(videoId)
 
   const response: Record<string, unknown> = {
@@ -113,12 +114,14 @@ router.get('/judge/:videoId', (req, res) => {
   if (!requireAdmin(req, res, () => {})) return
   const { videoId } = req.params
   const topic = req.query.topic as string | undefined
+  const paradigmId = (req.query.paradigm as string) || 'tech-over-truth'
   if (!topic) return res.status(400).json({ error: 'topic query parameter required' })
-  const cached = getCachedJudge(videoId, topic)
+  const cached = getCachedJudge(videoId, topic, paradigmId)
   if (!cached) return res.status(404).json({ error: 'Not found' })
   res.json({
     video_id: cached.video_id,
     topic: cached.topic,
+    paradigm_id: cached.paradigm_id,
     result: JSON.parse(cached.result),
     created_at: cached.created_at,
   })

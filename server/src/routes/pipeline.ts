@@ -29,7 +29,8 @@ import { generateFlowSheet } from '../flow.js'
 import { judgeRound } from '../judge.js'
 import { llmChat, LlmError, llmErrorToResponse } from '../llm.js'
 import { rateLimit, requireClientId } from '../rateLimit.js'
-import { getCachedTranscript, saveTranscriptCache, getCachedFlow, saveFlowCache, getCachedJudge, saveJudgeCache, getCachedRawTranscript, saveRawTranscriptCache } from '../db.js'
+import { getCachedTranscript, saveTranscriptCache, getCachedFlow, saveFlowCache, getCachedJudge, saveJudgeCache, getCachedRawTranscript, saveRawTranscriptCache, getCustomParadigm } from '../db.js'
+import { BUILTIN_PARADIGMS } from '../paradigms.js'
 import type { CaptionSegment, Transcript, FlowSheet, JudgingResult } from '../types.js'
 
 const router = Router()
@@ -46,6 +47,7 @@ interface PipelineJob {
   url: string
   topic: string
   videoId: string
+  paradigmId: string
   transcript: Transcript | null
   flow: FlowSheet | null
   judging: JudgingResult | null
@@ -105,6 +107,20 @@ async function fetchTranscriptData(videoId: string): Promise<{ text: string; off
 
 async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: ResumeFrom): Promise<void> {
   try {
+    // Resolve paradigm prompt
+    let paradigmPrompt = BUILTIN_PARADIGMS.find((p) => p.id === job.paradigmId)?.prompt
+    if (!paradigmPrompt) {
+      // Check custom paradigms
+      const custom = getCustomParadigm(job.paradigmId)
+      if (custom) {
+        paradigmPrompt = custom.prompt
+      } else {
+        // Fallback to default
+        paradigmPrompt = BUILTIN_PARADIGMS[0].prompt
+        job.paradigmId = BUILTIN_PARADIGMS[0].id
+      }
+    }
+
     // Step 1a: Fetch raw captions from YouTube (or cache)
     // Step 1b: Diarize into speaker segments (or cache)
     // These are separate so we can re-diarize without re-fetching from YouTube.
@@ -239,7 +255,7 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
     }
 
     // Step 3: Judge
-    const cachedJudge = (!resumeFrom) ? getCachedJudge(job.videoId, job.transcript.topic) : null
+    const cachedJudge = (!resumeFrom || resumeFrom === 'judge') ? getCachedJudge(job.videoId, job.transcript.topic, job.paradigmId) : null
     if (cachedJudge) {
       console.log(`[pipeline:${job.id}] Cache hit for judge`)
       job.judging = JSON.parse(cachedJudge.result)
@@ -247,12 +263,12 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
 
     if (!job.judging) {
       job.status = 'judge'
-      console.log(`[pipeline:${job.id}] Judging round...`)
-      job.judging = await judgeRound(job.flow, job.transcript.topic)
+      console.log(`[pipeline:${job.id}] Judging round with paradigm "${job.paradigmId}"...`)
+      job.judging = await judgeRound(job.flow, job.transcript.topic, paradigmPrompt)
 
       // Cache judge result
       try {
-        saveJudgeCache(job.videoId, job.transcript.topic, JSON.stringify(job.judging))
+        saveJudgeCache(job.videoId, job.transcript.topic, job.paradigmId, JSON.stringify(job.judging))
         console.log(`[pipeline:${job.id}] Cached judge result for video ${job.videoId}`)
       } catch (cacheErr) {
         console.warn(`[pipeline:${job.id}] Failed to cache judge result:`, cacheErr instanceof Error ? cacheErr.message : cacheErr)
@@ -282,7 +298,7 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
 }
 
 router.post('/', rateLimit, async (req, res) => {
-  const { url, topic, resumeFrom } = req.body as { url?: string; topic?: string; resumeFrom?: string }
+  const { url, topic, resumeFrom, paradigm } = req.body as { url?: string; topic?: string; resumeFrom?: string; paradigm?: string }
 
   if (!url || typeof url !== 'string' || url.length > MAX_URL_LENGTH) {
     return res.status(400).json({ error: 'Valid YouTube URL required' })
@@ -292,6 +308,14 @@ router.post('/', rateLimit, async (req, res) => {
   }
 
   const validResume = resumeFrom === 'transcript' || resumeFrom === 'diarize' || resumeFrom === 'flow' || resumeFrom === 'judge' ? resumeFrom : undefined
+  const paradigmId = paradigm || BUILTIN_PARADIGMS[0].id
+
+  // Validate paradigm exists
+  const builtinExists = BUILTIN_PARADIGMS.some((p) => p.id === paradigmId)
+  const customExists = !builtinExists && getCustomParadigm(paradigmId) !== null
+  if (!builtinExists && !customExists) {
+    return res.status(400).json({ error: `Unknown paradigm: ${paradigmId}` })
+  }
 
   const videoId = extractVideoId(url)
   if (!videoId) {
@@ -313,6 +337,7 @@ router.post('/', rateLimit, async (req, res) => {
     url,
     topic: topic ?? '',
     videoId,
+    paradigmId,
     transcript: null,
     flow: null,
     judging: null,

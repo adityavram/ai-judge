@@ -41,6 +41,10 @@ CRITICAL — INDEPENDENT OFFENSE:
 - Similarly, MG can introduce new arguments that extend or add to the Government case.
 - Independent offense from MO or MG must be weighed against the other side's case on its own merits, just like any other argument.`
 
+// Default paradigm prompt — used when no paradigm is specified.
+// This is the same as the "tech-over-truth" builtin paradigm.
+export const DEFAULT_PARADIGM_PROMPT = APDA_TECH_OVER_TRUTH
+
 function flowToText(flow: FlowSheet): string {
   return flow.clashes
     .map((clash) => {
@@ -60,10 +64,10 @@ function clashToText(clash: FlowClash): string {
 }
 
 // Step 1: Weighing analysis
-async function analyzeWeighing(flow: FlowSheet, topic: string): Promise<WeighingAnalysis> {
+async function analyzeWeighing(flow: FlowSheet, topic: string, paradigmPrompt: string): Promise<WeighingAnalysis> {
   const system = `You are an expert APDA debate judge. You are given a flow sheet from a debate round. Your task is to analyze the weighing — what issues matter most in this round and why.
 
-${APDA_TECH_OVER_TRUTH}
+${paradigmPrompt}
 
 Identify the 2-4 key issues that will decide this round. For each, explain:
 - What the issue is
@@ -109,10 +113,11 @@ async function evaluateSingleClash(
   topic: string,
   weighing: WeighingAnalysis,
   allClashNames: string[],
+  paradigmPrompt: string,
 ): Promise<ClashVerdict> {
   const system = `You are an expert APDA debate judge. You are evaluating a SINGLE clash point from a debate round. You must determine who won this specific clash.
 
-${APDA_TECH_OVER_TRUTH}
+${paradigmPrompt}
 
 Evaluate this clash independently. Other clashes in this round (${allClashNames.filter((n) => n !== clash.name).join(', ')}) are being evaluated separately — do NOT assume they all go the same way. It is COMMON for different clashes to be won by different sides.
 
@@ -156,11 +161,11 @@ ${clashToText(clash)}`
   return parsed
 }
 
-async function evaluateClashes(flow: FlowSheet, topic: string, weighing: WeighingAnalysis): Promise<ClashVerdict[]> {
+async function evaluateClashes(flow: FlowSheet, topic: string, weighing: WeighingAnalysis, paradigmPrompt: string): Promise<ClashVerdict[]> {
   const allClashNames = flow.clashes.map((c) => c.name)
 
   const verdicts = await Promise.all(
-    flow.clashes.map((clash) => evaluateSingleClash(clash, topic, weighing, allClashNames)),
+    flow.clashes.map((clash) => evaluateSingleClash(clash, topic, weighing, allClashNames, paradigmPrompt)),
   )
 
   console.log(`[judge] Step 2: Evaluated ${verdicts.length} clashes: ${verdicts.map((v) => `${v.clashName}→${v.winner}`).join(', ')}`)
@@ -180,10 +185,13 @@ async function generateDevilsAdvocate(
   weighing: WeighingAnalysis,
   clashVerdicts: ClashVerdict[],
   provisionalWinner: 'Government' | 'Opposition',
+  paradigmPrompt: string,
 ): Promise<DevilsAdvocatePosition[]> {
   const losingSide = provisionalWinner === 'Government' ? 'Opposition' : 'Government'
 
   const system = `You are an expert APDA debate judge playing devil's advocate. The provisional winner is ${provisionalWinner}. Your job is to construct the STRONGEST possible case for ${losingSide} — 2-3 distinct paths to victory they could have won through.
+
+${paradigmPrompt}
 
 Each path should be a genuine, plausible argument for why ${losingSide} should actually win. Consider:
 - Clashes they could have won with different framing
@@ -237,12 +245,13 @@ async function writeRFD(
   weighing: WeighingAnalysis,
   clashVerdicts: ClashVerdict[],
   provisionalWinner: 'Government' | 'Opposition',
+  paradigmPrompt: string,
 ): Promise<RFDSection> {
   const losingSide = provisionalWinner === 'Government' ? 'Opposition' : 'Government'
 
   const system = `You are an expert APDA debate judge writing the Reason for Decision (RFD).
 
-${APDA_TECH_OVER_TRUTH}
+${paradigmPrompt}
 
 The winner is ${provisionalWinner}. Write a structured RFD with exactly these 4 sections. Do NOT repeat devil's advocate arguments — those are shown separately. Focus on YOUR decision and why you reached it.
 
@@ -311,6 +320,7 @@ async function scoreDebater(
   clashVerdicts: ClashVerdict[],
   winner: 'Government' | 'Opposition',
   rfd: RFDSection,
+  paradigmPrompt: string,
 ): Promise<SpeakerScore[]> {
   const side = speeches[0] === 'PMC' || speeches[0] === 'MG' || speeches[0] === 'PMR'
     ? 'Government'
@@ -331,7 +341,7 @@ async function scoreDebater(
 
   const system = `You are an expert APDA debate judge assigning speaker scores and ranks for a SINGLE debater.
 
-${APDA_TECH_OVER_TRUTH}
+${paradigmPrompt}
 
 APDA Speaker Scale Reference:
 ${speaksGuide}
@@ -411,12 +421,13 @@ async function assignSpeaks(
   clashVerdicts: ClashVerdict[],
   winner: 'Government' | 'Opposition',
   rfd: RFDSection,
+  paradigmPrompt: string,
 ): Promise<SpeakerScore[]> {
   const debaterEntries = Object.entries(DEBATER_SPEECHES)
 
   const results = await Promise.all(
     debaterEntries.map(([name, speeches]) =>
-      scoreDebater(name, speeches, flow, topic, clashVerdicts, winner, rfd),
+      scoreDebater(name, speeches, flow, topic, clashVerdicts, winner, rfd, paradigmPrompt),
     ),
   )
 
@@ -479,11 +490,14 @@ async function generateFeedback(
   speakerScores: SpeakerScore[],
   winner: 'Government' | 'Opposition',
   rfd: RFDSection,
+  paradigmPrompt: string,
 ): Promise<{ governmentTeam: TeamFeedback; oppositionTeam: TeamFeedback }> {
   const govScores = speakerScores.filter((s) => s.side === 'Government')
   const oppScores = speakerScores.filter((s) => s.side === 'Opposition')
 
   const system = `You are an expert APDA debate judge giving feedback to debaters. Provide constructive, specific feedback for each team.
+
+${paradigmPrompt}
 
 For each team:
 - Strengths: 2-4 specific things they did well (reference actual arguments)
@@ -540,15 +554,15 @@ ${flowToText(flow)}`
   return parsed
 }
 
-export async function judgeRound(flow: FlowSheet, topic: string): Promise<JudgingResult> {
+export async function judgeRound(flow: FlowSheet, topic: string, paradigmPrompt: string): Promise<JudgingResult> {
   const startMs = Date.now()
   console.log('[judge] Starting judging pipeline...')
 
   // Step 1: Weighing analysis
-  const weighing = await analyzeWeighing(flow, topic)
+  const weighing = await analyzeWeighing(flow, topic, paradigmPrompt)
 
   // Step 2: Per-clash evaluation (parallel)
-  const clashVerdicts = await evaluateClashes(flow, topic, weighing)
+  const clashVerdicts = await evaluateClashes(flow, topic, weighing, paradigmPrompt)
 
   // Step 3: Determine provisional winner (deterministic), then devil's advocate
   const provisionalWinner = determineProvisionalWinner(clashVerdicts)
@@ -556,15 +570,15 @@ export async function judgeRound(flow: FlowSheet, topic: string): Promise<Judgin
 
   // Step 4 & 5 can run in parallel with devil's advocate
   const [devilsAdvocate, rfd] = await Promise.all([
-    generateDevilsAdvocate(flow, topic, weighing, clashVerdicts, provisionalWinner),
-    writeRFD(flow, topic, weighing, clashVerdicts, provisionalWinner),
+    generateDevilsAdvocate(flow, topic, weighing, clashVerdicts, provisionalWinner, paradigmPrompt),
+    writeRFD(flow, topic, weighing, clashVerdicts, provisionalWinner, paradigmPrompt),
   ])
 
   // Step 5: Per-debater speaker scores (parallel)
-  const speakerScores = await assignSpeaks(flow, topic, clashVerdicts, provisionalWinner, rfd)
+  const speakerScores = await assignSpeaks(flow, topic, clashVerdicts, provisionalWinner, rfd, paradigmPrompt)
 
   // Step 6: Generate feedback
-  const { governmentTeam, oppositionTeam } = await generateFeedback(flow, clashVerdicts, speakerScores, provisionalWinner, rfd)
+  const { governmentTeam, oppositionTeam } = await generateFeedback(flow, clashVerdicts, speakerScores, provisionalWinner, rfd, paradigmPrompt)
 
   console.log(`[judge] Complete. Winner: ${provisionalWinner}. Total: ${Date.now() - startMs}ms`)
 

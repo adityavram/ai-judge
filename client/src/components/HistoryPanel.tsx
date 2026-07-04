@@ -11,9 +11,10 @@ import './HistoryPanel.css'
 
 interface HistoryPanelProps {
   onSelect: (videoId: string, topic: string, transcript: Transcript | null, flow: FlowSheet | null, judging: JudgingResult | null) => void
+  paradigmId: string
 }
 
-export function HistoryPanel({ onSelect }: HistoryPanelProps) {
+export function HistoryPanel({ onSelect, paradigmId }: HistoryPanelProps) {
   const [rounds, setRounds] = useState<CachedRoundSummary[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -31,7 +32,7 @@ export function HistoryPanel({ onSelect }: HistoryPanelProps) {
   const handleSelect = async (videoId: string) => {
     setLoading(true)
     try {
-      const detail = await getCachedRound(videoId)
+      const detail = await getCachedRound(videoId, paradigmId)
       if (detail) {
         onSelect(videoId, detail.topic, detail.transcript, detail.flow, detail.judging)
         setOpen(false)

@@ -136,6 +136,19 @@ export interface JudgingResult {
 
 export type PipelineStatus = 'transcript' | 'diarize' | 'flow' | 'judge' | 'done' | 'error'
 
+export interface Paradigm {
+  id: string
+  name: string
+  description: string
+  prompt: string
+  isBuiltin: boolean
+}
+
+export interface ParadigmList {
+  builtin: Paradigm[]
+  custom: Paradigm[]
+}
+
 export interface PipelineState {
   id: string
   status: PipelineStatus
@@ -148,11 +161,11 @@ export interface PipelineState {
 
 const MAX_POLL_RETRIES = 3
 
-export async function startPipeline(url: string, topic?: string, resumeFrom?: 'transcript' | 'diarize' | 'flow' | 'judge'): Promise<string> {
+export async function startPipeline(url: string, topic?: string, resumeFrom?: 'transcript' | 'diarize' | 'flow' | 'judge', paradigm?: string): Promise<string> {
   const res = await fetch(`${API_BASE}/api/pipeline`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ url, topic, resumeFrom }),
+    body: JSON.stringify({ url, topic, resumeFrom, paradigm }),
   })
   if (res.status === 429) throw new Error('Daily round limit reached. Please try again tomorrow.')
   if (res.status === 400) {
@@ -250,11 +263,43 @@ export async function listCachedRounds(): Promise<CachedRoundSummary[]> {
   return res.json() as Promise<CachedRoundSummary[]>
 }
 
+export async function listParadigms(): Promise<ParadigmList> {
+  const res = await fetch(`${API_BASE}/api/paradigms`, {
+    headers: authHeaders(),
+  })
+  if (!res.ok) return { builtin: [], custom: [] }
+  return res.json() as Promise<ParadigmList>
+}
+
+export async function createParadigm(name: string, description: string, prompt: string): Promise<Paradigm> {
+  const res = await fetch(`${API_BASE}/api/paradigms`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ name, description, prompt }),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    throw new Error(typeof body === 'object' && body.error ? body.error : `HTTP ${res.status}`)
+  }
+  return res.json() as Promise<Paradigm>
+}
+
+export async function deleteParadigm(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/paradigms/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`Failed to delete paradigm: HTTP ${res.status}`)
+  }
+}
+
 export interface CachedRoundDetail {
   videoId: string
   topic: string
   topicInferred: boolean
   hasTranscript: boolean
+  hasRawTranscript: boolean
   hasFlow: boolean
   hasJudge: boolean
   createdAt: string
@@ -263,8 +308,9 @@ export interface CachedRoundDetail {
   judging: JudgingResult | null
 }
 
-export async function getCachedRound(videoId: string): Promise<CachedRoundDetail | null> {
-  const res = await fetch(`${API_BASE}/api/cache/rounds/${videoId}`, {
+export async function getCachedRound(videoId: string, paradigmId?: string): Promise<CachedRoundDetail | null> {
+  const params = paradigmId ? `?paradigm=${encodeURIComponent(paradigmId)}` : ''
+  const res = await fetch(`${API_BASE}/api/cache/rounds/${videoId}${params}`, {
     headers: authHeaders(),
   })
   if (res.status === 404) return null
