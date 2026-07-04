@@ -10,7 +10,7 @@ interface ParadigmSelectorProps {
 export function ParadigmSelector({ selected, onSelect }: ParadigmSelectorProps) {
   const [paradigms, setParadigms] = useState<ParadigmList>({ builtin: [], custom: [] })
   const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [editPrompt, setEditPrompt] = useState('')
@@ -25,17 +25,18 @@ export function ParadigmSelector({ selected, onSelect }: ParadigmSelectorProps) 
   }, [])
 
   const allParadigms = [...paradigms.builtin, ...paradigms.custom]
+  const selectedParadigm = allParadigms.find((p) => p.id === selected)
 
   const startCustom = () => {
-    setEditing('new')
+    setEditing(true)
     setEditName('')
     setEditDesc('')
     setEditPrompt(paradigms.builtin[0]?.prompt ?? '')
     setError(null)
   }
 
-  const startEditBuiltin = (p: Paradigm) => {
-    setEditing('new')
+  const startFromBuiltin = (p: Paradigm) => {
+    setEditing(true)
     setEditName(p.name + ' (custom)')
     setEditDesc(p.description)
     setEditPrompt(p.prompt)
@@ -53,7 +54,7 @@ export function ParadigmSelector({ selected, onSelect }: ParadigmSelectorProps) 
       const created = await createParadigm(editName.trim(), editDesc.trim(), editPrompt.trim())
       setParadigms((prev) => ({ ...prev, custom: [...prev.custom, created] }))
       onSelect(created.id)
-      setEditing(null)
+      setEditing(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
@@ -74,10 +75,11 @@ export function ParadigmSelector({ selected, onSelect }: ParadigmSelectorProps) 
   if (editing) {
     return (
       <div className="paradigm-selector">
+        <div className="paradigm-label">Judging Paradigm</div>
         <div className="paradigm-editor">
           <div className="paradigm-editor-header">
             <h3>Create Custom Paradigm</h3>
-            <button className="paradigm-cancel-btn" onClick={() => setEditing(null)} disabled={saving}>Cancel</button>
+            <button className="paradigm-cancel-btn" onClick={() => setEditing(false)} disabled={saving}>Cancel</button>
           </div>
           <label className="paradigm-field">
             Name
@@ -103,36 +105,45 @@ export function ParadigmSelector({ selected, onSelect }: ParadigmSelectorProps) 
   return (
     <div className="paradigm-selector">
       <div className="paradigm-label">Judging Paradigm</div>
-      <div className="paradigm-cards">
-        {allParadigms.map((p) => (
+      <div className="paradigm-row">
+        <select
+          className="paradigm-select"
+          value={selected}
+          onChange={(e) => {
+            if (e.target.value === '__new') {
+              startCustom()
+            } else {
+              onSelect(e.target.value)
+            }
+          }}
+        >
+          {allParadigms.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}{p.isBuiltin ? '' : ' (custom)'}
+            </option>
+          ))}
+          <option value="__new">+ Create custom...</option>
+        </select>
+        {selectedParadigm && !selectedParadigm.isBuiltin && (
           <button
-            key={p.id}
-            className={`paradigm-card ${selected === p.id ? 'selected' : ''}`}
-            onClick={() => onSelect(p.id)}
+            className="paradigm-delete-btn-inline"
+            onClick={() => handleDelete(selected)}
+            title="Delete this custom paradigm"
           >
-            <div className="paradigm-card-name">{p.name}</div>
-            <div className="paradigm-card-desc">{p.description}</div>
-            {!p.isBuiltin && (
-              <button
-                className="paradigm-delete-btn"
-                onClick={(e) => { e.stopPropagation(); handleDelete(p.id) }}
-                title="Delete custom paradigm"
-              >
-                {'\u2715'}
-              </button>
-            )}
+            Delete
+          </button>
+        )}
+      </div>
+      {selectedParadigm && (
+        <div className="paradigm-desc">{selectedParadigm.description}</div>
+      )}
+      <div className="paradigm-actions">
+        {paradigms.builtin.map((p) => (
+          <button key={`copy-${p.id}`} className="paradigm-copy-btn" onClick={() => startFromBuiltin(p)}>
+            Copy &ldquo;{p.name}&rdquo; as custom
           </button>
         ))}
-        <button className="paradigm-card paradigm-card-add" onClick={startCustom}>
-          <div className="paradigm-card-name">+ Custom</div>
-          <div className="paradigm-card-desc">Create your own judging paradigm</div>
-        </button>
       </div>
-      {paradigms.builtin.map((p) => (
-        <button key={`copy-${p.id}`} className="paradigm-copy-btn" onClick={() => startEditBuiltin(p)}>
-          Copy &ldquo;{p.name}&rdquo; as custom
-        </button>
-      ))}
     </div>
   )
 }
