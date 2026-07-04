@@ -295,6 +295,7 @@ export async function pollPipeline(jobId: string): Promise<PipelineState> {
         return {
           id: jobId,
           status: 'error',
+          format: 'apda',
           transcript: null,
           flow: null,
           judging: null,
@@ -311,6 +312,7 @@ export async function pollPipeline(jobId: string): Promise<PipelineState> {
         return {
           id: jobId,
           status: 'error',
+          format: 'apda',
           transcript: null,
           flow: null,
           judging: null,
