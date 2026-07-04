@@ -86,8 +86,9 @@ CRITICAL — ARGUMENT QUALITY:
     prompt: `This round is judged under COMPARATIVE / RELATIVE CONTRIBUTION (standard WUDC judging). You are ranking 4 teams (OG, OO, CG, CO) based on their RELATIVE CONTRIBUTION to the debate. This means:
 
 RANKING CRITERIA:
-- Which team contributed most to advancing the debate? This includes introducing new arguments, providing important rebuttal, and offering unique weighing.
-- A team that introduces a novel, important argument that nobody else makes may rank higher than a team that only responds to others' arguments.
+- Rankings are determined by PAIRWISE IMPACT WEIGHING. Compare teams head-to-head on each key issue: which team proved the bigger, more probable, or more important impact?
+- Having an extension does NOT automatically outrank an opening team. CG must beat OO on impact weighing to rank above them, and CO must beat OG on impact weighing.
+- A team that introduces a novel, important argument that nobody else makes may rank higher than a team that only responds to others' arguments — but only if that argument's impact outweighs the other team's impacts.
 - Opening teams (OG, OO) get credit for setting up the debate. Closing teams (CG, CO) must EXTEND — bring genuinely new, distinct material that differentiates them from their opening.
 
 EXTENSIONS (CRITICAL):
@@ -127,7 +128,7 @@ WEIGHING: Which team best explained why their arguments matter MORE than the oth
 TEAM COMPARISON:
 - Rank all 4 teams based on which was most convincing overall.
 - Consider: which team would a reasonable person agree with most? Which team made the most sense?
-- Extensions matter only insofar as they make a team's position more convincing — not as a technical requirement.
+- Extensions matter, but a closing team does NOT automatically outrank an opening team just because they extended. The extension must be more persuasive and have bigger impact than the other team's case.
 - If a closing team contradicts their opening team, that can be confusing and unpersuasive — but minor knifing is common and often forgiven. Penalize based on how much it actually undermines the opening's case.
 
 STYLE: Clear speaking, good organization, confident delivery. Disorganized or unclear speeches lose persuasiveness.`,

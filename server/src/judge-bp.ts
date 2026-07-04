@@ -48,7 +48,8 @@ const BP_PARADIGM_CONTEXT = `BRITISH PARLIAMENTARY RULES — These are always tr
 - Whip speeches (GW, OW) may NOT introduce new arguments — they crystallize, weigh, and summarize
 - New arguments in whip speeches should be disregarded and penalized in scoring
 - There is no "low-point wins" rule in the traditional sense, but speaker points serve as a sanity check: teams ranked higher should generally have better combined speaker points
-- Relative comparison between ALL FOUR teams is essential — this is not a binary win/loss`
+- Relative comparison between ALL FOUR teams is essential — this is not a binary win/loss
+- Ranking is determined by PAIRWISE IMPACT WEIGHING: compare teams head-to-head on each key issue. The team that proves the larger, more probable, or more important impact wins that clash. Having an extension does NOT automatically outrank an opening team — CG must prove their extension has bigger impacts than OO's case, and vice versa for all pairwise matchups`
 
 function bpFlowToText(flow: BPFlowSheet): string {
   return flow.entries
@@ -94,12 +95,13 @@ Identify the 2-4 key issues that will decide this round. For each, explain:
 - What the issue is
 - How important it is relative to other issues
 - Why it matters (what turns on this issue)
-- Which team is leading on this issue
+- Which team is leading on this issue based on IMPACT WEIGHING — which team proved the bigger, more probable, or more important impact on this issue?
 
 Then assess each team's relative contribution:
 - What did each team contribute to the debate?
 - What were their key strengths?
 - What were their key weaknesses?
+- How do their impacts compare pairwise against other teams?
 
 Provide an overall framework for how this round should be evaluated across all 4 teams.
 
@@ -219,9 +221,14 @@ Rank all 4 teams (OG, OO, CG, CO) from 1st (best) to 4th (worst) based on their 
 - Were there any knifing issues? Consider severity — minor knifing that doesn't undermine the opening's core case is often forgiven, while direct contradictions should be penalized
 - Did any whip speeches introduce new arguments (which should be penalized)?
 
+CRITICAL — PAIRWISE IMPACT WEIGHING:
+Rankings are determined by comparing teams head-to-head on the key issues of the round. For each clash, ask: which team proved the bigger impact? Which team's mechanisms are stronger and more probable? The team that wins the most important clashes on impact weighing ranks higher.
+
+IMPORTANT: Having an extension does NOT automatically mean a closing team outranks an opening team. CG's extension must be weighed against OO's case — if OO proved bigger impacts on the key issues, OO ranks above CG regardless of whether CG extended. Similarly, CO must win their clashes against OG's case to rank above OG.
+
 IMPORTANT RULES:
 - No ties — each rank must be unique (1, 2, 3, 4)
-- Consider the relative contribution of each team, not just who "won" their clashes
+- Rank by IMPACT WEIGHING: which team proved the bigger, more probable, more important impacts on the key clashes?
 - Closing teams without genuine extensions should generally rank below their opening counterparts
 - Closing teams that knife their opening should be penalized proportionally — minor knifing is often forgiven, but direct contradictions that undermine the opening's core case warrant a significant penalty
 - Opening teams that left no room for extension may still rank well if their case was strong
@@ -301,11 +308,11 @@ Write a structured RFD that builds through the round speech-by-speech, as real B
 
 3. "topHalfReasoning": Why the winning opening team beat the other. What specific arguments or weighing gave them the edge? (2-3 sentences)
 
-4. "closingGovernment": What did CG bring as their extension? How does it compare to OG's case and OO's rebuttal? Did they differentiate from OG? Did they knife OG, and if so, was it a minor soft knife or a direct contradiction that undermines OG's core case? Where does CG rank relative to OG and OO, and why? (3-5 sentences)
+4. "closingGovernment": What did CG bring as their extension? How does it compare to OG's case and OO's rebuttal? Did they differentiate from OG? Did they knife OG, and if so, was it a minor soft knife or a direct contradiction that undermines OG's core case? On impact weighing, does CG's extension prove bigger impacts than OO's case? Where does CG rank relative to OG and OO, and why? (3-5 sentences)
 
-5. "closingOpposition": What did CO bring as their extension? How does it compare to OO's case, OG's case, and CG's extension? Did they differentiate from OO? Did they knife OO, and if so, was it a minor soft knife or a direct contradiction that undermines OO's core case? Where does CO rank relative to the other three teams, and why? (3-5 sentences)
+5. "closingOpposition": What did CO bring as their extension? How does it compare to OO's case, OG's case, and CG's extension? Did they differentiate from OO? Did they knife OO, and if so, was it a minor soft knife or a direct contradiction that undermines OO's core case? On impact weighing, does CO's extension prove bigger impacts than OG's case? Where does CO rank relative to the other three teams, and why? (3-5 sentences)
 
-6. "finalRankingJustification": Tie it all together. State the final ranking (1st through 4th) and summarize why each team is in their position, with explicit pairwise comparisons between adjacent ranks. (3-5 sentences)
+6. "finalRankingJustification": Tie it all together. State the final ranking (1st through 4th) and for each adjacent pair, explain which team won the key clashes on impact weighing — who proved the bigger, more probable, or more important impact. (3-5 sentences)
 
 Be direct and specific — reference actual arguments from the flow, not vague generalities.
 
@@ -361,12 +368,12 @@ ${BP_PARADIGM_CONTEXT}
 
 ${paradigmPrompt}
 
-Each path should be a genuine, plausible argument for why ${fourthPlaceTeam} should have ranked higher. Consider:
-- Issues they could have won with different framing
-- Weighing they could have used to prioritize their arguments
+Each path should be a genuine, plausible argument for why ${fourthPlaceTeam} should have ranked higher. Focus on IMPACT WEIGHING — where could ${fourthPlaceTeam} have won key clashes by proving bigger, more probable, or more important impacts? Consider:
+- Issues they could have won with different framing or impact calculus
+- Weighing they could have used to prioritize their impacts over higher-ranked teams' impacts
 - Extensions they could have run (if closing) or extensions from their closing that could have elevated them (if opening)
 - Drops by higher-ranked teams that could have been exploited
-- Alternative frameworks that favor ${fourthPlaceTeam}
+- Alternative frameworks that favor ${fourthPlaceTeam}'s impacts
 
 Respond with ONLY valid JSON:
 {
