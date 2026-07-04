@@ -15,7 +15,7 @@ import { randomUUID } from 'crypto'
 const router = Router()
 
 const MAX_NAME_LENGTH = 100
-const MAX_PROMPT_LENGTH = 5000
+const MAX_PROMPT_LENGTH = 50000
 
 function getClientId(req: { headers: Record<string, string | string[] | undefined> }): string {
   const id = req.headers['x-client-id']

@@ -83,7 +83,8 @@ export function ParadigmSelector({ selected, onSelect }: ParadigmSelectorProps) 
           </label>
           <label className="paradigm-field">
             Judging Instructions
-            <textarea value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} maxLength={5000} rows={8} placeholder="Instructions for how the AI should judge the round..." />
+            <textarea value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} maxLength={50000} rows={12} placeholder="Instructions for how the AI should judge the round..." />
+            <span className="paradigm-char-count">{editPrompt.length.toLocaleString()} / 50,000</span>
           </label>
           {error && <div className="paradigm-error">{error}</div>}
           <button className="paradigm-save-btn" onClick={handleSave} disabled={saving || !editName.trim() || !editPrompt.trim()}>
