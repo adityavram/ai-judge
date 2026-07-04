@@ -4,11 +4,15 @@
  * POST /api/pipeline — starts a new pipeline job, returns 202 with job ID
  * GET  /api/pipeline/:id — polls job status (transcript → diarize → flow → judge → done)
  *
- * Pipeline steps:
+ * Supports two debate formats:
+ *   APDA: 2-team, 6 speeches, clash-based flow, binary winner
+ *   BP:   4-team, 8 speeches, speech-by-speech flow, ranked 1st-4th
+ *
+ * Pipeline steps (same for both formats):
  * 1. Transcript: Fetch raw captions from YouTube (or raw_transcript_cache)
  * 2. Diarize: Segment captions into speaker-labeled speech blocks
- * 3. Flow: Extract arguments and cluster into clashes
- * 4. Judge: Weighing, clash verdicts, RFD, devil's advocate, speaker scores, feedback
+ * 3. Flow: Extract arguments (APDA: cluster into clashes; BP: speech-by-speech)
+ * 4. Judge: Evaluate round (APDA: binary winner; BP: 4-team ranking)
  *
  * Resume/re-run via `resumeFrom` parameter:
  * - 'transcript': re-fetch from YouTube, re-diarize, re-flow, re-judge
@@ -25,13 +29,16 @@ import { Router } from 'express'
 import { randomUUID } from 'crypto'
 import { extractVideoId, fetchYouTubeTranscript, YouTubeRateLimitError, YouTubeNoTranscriptError } from '../youtube.js'
 import { assignSpeakers } from '../diarization.js'
+import { assignSpeakersBP } from '../diarization-bp.js'
 import { generateFlowSheet } from '../flow.js'
+import { generateFlowSheetBP } from '../flow-bp.js'
 import { judgeRound } from '../judge.js'
+import { judgeRoundBP } from '../judge-bp.js'
 import { llmChat, LlmError, llmErrorToResponse } from '../llm.js'
 import { rateLimit, requireClientId } from '../rateLimit.js'
 import { getCachedTranscript, saveTranscriptCache, getCachedFlow, saveFlowCache, getCachedJudge, saveJudgeCache, getCachedRawTranscript, saveRawTranscriptCache, getCustomParadigm } from '../db.js'
 import { BUILTIN_PARADIGMS } from '../paradigms.js'
-import type { CaptionSegment, Transcript, FlowSheet, JudgingResult } from '../types.js'
+import type { DebateFormat, CaptionSegment, Transcript, FlowSheet, BPFlowSheet, JudgingResult, BPJudgingResult, AnyFlowSheet, AnyJudgingResult } from '../types.js'
 
 const router = Router()
 
@@ -47,10 +54,11 @@ interface PipelineJob {
   url: string
   topic: string
   videoId: string
+  format: DebateFormat
   paradigmId: string
   transcript: Transcript | null
-  flow: FlowSheet | null
-  judging: JudgingResult | null
+  flow: AnyFlowSheet | null
+  judging: AnyJudgingResult | null
   error: string | null
   errorStep: string | null
   createdAt: number
@@ -76,9 +84,10 @@ function cleanupOldJobs(): void {
   }
 }
 
-async function inferTopic(text: string): Promise<string> {
+async function inferTopic(text: string, format: DebateFormat): Promise<string> {
   const sampleText = text.slice(0, 3000)
-  const system = `You are an APDA debate expert. Given the opening speech of a debate round, infer the debate topic/motion. Respond with ONLY the topic as a short phrase (e.g. "This House would ban social media for minors"). No preamble, no quotes, no explanation.`
+  const formatLabel = format === 'bp' ? 'British Parliamentary (BP)' : 'APDA'
+  const system = `You are a ${formatLabel} debate expert. Given the opening speech of a debate round, infer the debate topic/motion. Respond with ONLY the topic as a short phrase (e.g. "This House would ban social media for minors"). No preamble, no quotes, no explanation.`
   const user = `Here is the opening speech of a debate. Infer the topic/motion being debated:\n\n${sampleText}`
   const response = await llmChat({
     messages: [
@@ -110,25 +119,25 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
     // Resolve paradigm prompt
     let paradigmPrompt = BUILTIN_PARADIGMS.find((p) => p.id === job.paradigmId)?.prompt
     if (!paradigmPrompt) {
-      // Check custom paradigms
       const custom = getCustomParadigm(job.paradigmId)
       if (custom) {
         paradigmPrompt = custom.prompt
       } else {
-        // Fallback to default
-        paradigmPrompt = BUILTIN_PARADIGMS[0].prompt
-        job.paradigmId = BUILTIN_PARADIGMS[0].id
+        const defaultParadigm = BUILTIN_PARADIGMS.find((p) => p.format === job.format) ?? BUILTIN_PARADIGMS[0]
+        paradigmPrompt = defaultParadigm.prompt
+        job.paradigmId = defaultParadigm.id
       }
     }
 
     // Step 1a: Fetch raw captions from YouTube (or cache)
     // Step 1b: Diarize into speaker segments (or cache)
-    // These are separate so we can re-diarize without re-fetching from YouTube.
-    const cachedTranscript = (resumeFrom !== 'transcript' && resumeFrom !== 'diarize') ? getCachedTranscript(job.videoId) : null
+    const cacheFormat = job.format
+    const cachedTranscript = (resumeFrom !== 'transcript' && resumeFrom !== 'diarize') ? getCachedTranscript(job.videoId, cacheFormat) : null
     if (cachedTranscript) {
       console.log(`[pipeline:${job.id}] Cache hit for transcript`)
       job.transcript = {
         videoId: cachedTranscript.video_id,
+        format: (cachedTranscript.format as DebateFormat) || 'apda',
         rawSegments: JSON.parse(cachedTranscript.raw_segments),
         segments: JSON.parse(cachedTranscript.segments),
         segmentationConfidence: cachedTranscript.confidence as 'high' | 'low',
@@ -141,7 +150,6 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
     if (!job.transcript) {
       let captionSegments: CaptionSegment[]
 
-      // Try raw transcript cache first (unless re-pulling from YouTube)
       const cachedRaw = (resumeFrom !== 'transcript') ? getCachedRawTranscript(job.videoId) : null
       if (cachedRaw) {
         console.log(`[pipeline:${job.id}] Cache hit for raw transcript`)
@@ -155,7 +163,6 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
         job.status = 'transcript'
         const rawCaptions = await fetchTranscriptData(job.videoId)
 
-        // Cache raw captions (before diarization)
         try {
           saveRawTranscriptCache(job.videoId, JSON.stringify(rawCaptions))
           console.log(`[pipeline:${job.id}] Cached raw transcript for video ${job.videoId}`)
@@ -170,24 +177,25 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
         }))
       }
 
-      // Diarize: assign speaker labels
       let resolvedTopic = topic?.trim() ?? ''
       let topicInferred = false
 
       job.status = 'diarize'
-      const { segments, confidence, detectedSpeechCount } = await assignSpeakers(captionSegments, resolvedTopic || undefined)
+      const { segments, confidence, detectedSpeechCount } = job.format === 'bp'
+        ? await assignSpeakersBP(captionSegments, resolvedTopic || undefined)
+        : await assignSpeakers(captionSegments, resolvedTopic || undefined)
 
       if (!resolvedTopic) {
         try {
           console.log(`[pipeline:${job.id}] Inferring topic...`)
-          const pmc = segments.find((s) => s.speaker.startsWith('PMC'))
-          const pmcText = pmc?.text ?? segments[0]?.text ?? captionSegments.map((c) => c.text).join(' ')
-          resolvedTopic = await inferTopic(pmcText)
+          const firstSpeech = segments[0]?.text ?? captionSegments.map((c) => c.text).join(' ')
+          resolvedTopic = await inferTopic(firstSpeech, job.format)
           topicInferred = true
           console.log(`[pipeline:${job.id}] Inferred topic: ${resolvedTopic}`)
 
           if (segments.length > 1) {
-            const { segments: revalidated } = await assignSpeakers(captionSegments, resolvedTopic)
+            const reassignFn = job.format === 'bp' ? assignSpeakersBP : assignSpeakers
+            const { segments: revalidated } = await reassignFn(captionSegments, resolvedTopic)
             if (revalidated.length === segments.length) {
               revalidated.forEach((seg, i) => {
                 if (segments[i]) segments[i].speaker = seg.speaker
@@ -208,6 +216,7 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
 
       job.transcript = {
         videoId: job.videoId,
+        format: job.format,
         rawSegments: captionSegments,
         segments,
         segmentationConfidence: confidence,
@@ -216,7 +225,6 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
         topicInferred,
       }
 
-      // Cache full transcript (after diarization)
       try {
         saveTranscriptCache(
           job.videoId,
@@ -226,6 +234,7 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
           job.transcript.detectedSpeechCount,
           job.transcript.topic,
           job.transcript.topicInferred,
+          job.format,
         )
         console.log(`[pipeline:${job.id}] Cached transcript for video ${job.videoId}`)
       } catch (cacheErr) {
@@ -234,7 +243,7 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
     }
 
     // Step 2: Flow
-    const cachedFlow = (resumeFrom !== 'transcript' && resumeFrom !== 'diarize' && resumeFrom !== 'flow') ? getCachedFlow(job.videoId, job.transcript.topic) : null
+    const cachedFlow = (resumeFrom !== 'transcript' && resumeFrom !== 'diarize' && resumeFrom !== 'flow') ? getCachedFlow(job.videoId, job.transcript.topic, cacheFormat) : null
     if (cachedFlow) {
       console.log(`[pipeline:${job.id}] Cache hit for flow`)
       job.flow = JSON.parse(cachedFlow.flow)
@@ -242,20 +251,21 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
 
     if (!job.flow) {
       job.status = 'flow'
-      console.log(`[pipeline:${job.id}] Generating flow...`)
-      job.flow = await generateFlowSheet(job.transcript.segments)
+      console.log(`[pipeline:${job.id}] Generating flow (${job.format})...`)
+      job.flow = job.format === 'bp'
+        ? await generateFlowSheetBP(job.transcript.segments)
+        : await generateFlowSheet(job.transcript.segments)
 
-      // Cache flow
       try {
-        saveFlowCache(job.videoId, job.transcript.topic, JSON.stringify(job.flow))
+        saveFlowCache(job.videoId, job.transcript.topic, JSON.stringify(job.flow), job.format)
         console.log(`[pipeline:${job.id}] Cached flow for video ${job.videoId}`)
       } catch (cacheErr) {
         console.warn(`[pipeline:${job.id}] Failed to cache flow:`, cacheErr instanceof Error ? cacheErr.message : cacheErr)
       }
     }
 
-    // Step 3: Judge
-    const cachedJudge = (!resumeFrom || resumeFrom === 'judge') ? getCachedJudge(job.videoId, job.transcript.topic, job.paradigmId) : null
+    // Step 3: Judge (use cache only if not resuming from any step)
+    const cachedJudge = (!resumeFrom) ? getCachedJudge(job.videoId, job.transcript.topic, job.paradigmId, cacheFormat) : null
     if (cachedJudge) {
       console.log(`[pipeline:${job.id}] Cache hit for judge`)
       job.judging = JSON.parse(cachedJudge.result)
@@ -263,12 +273,22 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
 
     if (!job.judging) {
       job.status = 'judge'
-      console.log(`[pipeline:${job.id}] Judging round with paradigm "${job.paradigmId}"...`)
-      job.judging = await judgeRound(job.flow, job.transcript.topic, paradigmPrompt)
+      console.log(`[pipeline:${job.id}] Judging round (${job.format}) with paradigm "${job.paradigmId}"...`)
 
-      // Cache judge result
+      if (job.format === 'bp') {
+        if (job.flow.format !== 'bp') {
+          throw new Error('Format mismatch: BP pipeline received APDA flow sheet')
+        }
+        job.judging = await judgeRoundBP(job.flow as BPFlowSheet, job.transcript.topic, paradigmPrompt)
+      } else {
+        if (job.flow.format !== 'apda') {
+          throw new Error('Format mismatch: APDA pipeline received BP flow sheet')
+        }
+        job.judging = await judgeRound(job.flow as FlowSheet, job.transcript.topic, paradigmPrompt)
+      }
+
       try {
-        saveJudgeCache(job.videoId, job.transcript.topic, job.paradigmId, JSON.stringify(job.judging))
+        saveJudgeCache(job.videoId, job.transcript.topic, job.paradigmId, JSON.stringify(job.judging), job.format)
         console.log(`[pipeline:${job.id}] Cached judge result for video ${job.videoId}`)
       } catch (cacheErr) {
         console.warn(`[pipeline:${job.id}] Failed to cache judge result:`, cacheErr instanceof Error ? cacheErr.message : cacheErr)
@@ -276,7 +296,10 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
     }
 
     job.status = 'done'
-    console.log(`[pipeline:${job.id}] Complete! Winner: ${job.judging.winner}`)
+    const winnerLabel = job.format === 'bp'
+      ? `1st: ${(job.judging as BPJudgingResult).rankings[0]?.team ?? '?'}`
+      : (job.judging as JudgingResult).winner
+    console.log(`[pipeline:${job.id}] Complete! Format: ${job.format}, Result: ${winnerLabel}`)
   } catch (err) {
     const stepLabel = job.status === 'transcript' ? 'Transcript'
       : job.status === 'diarize' ? 'Diarize'
@@ -298,7 +321,7 @@ async function runPipeline(job: PipelineJob, topic?: string, resumeFrom?: Resume
 }
 
 router.post('/', rateLimit, async (req, res) => {
-  const { url, topic, resumeFrom, paradigm } = req.body as { url?: string; topic?: string; resumeFrom?: string; paradigm?: string }
+  const { url, topic, resumeFrom, paradigm, format } = req.body as { url?: string; topic?: string; resumeFrom?: string; paradigm?: string; format?: string }
 
   if (!url || typeof url !== 'string' || url.length > MAX_URL_LENGTH) {
     return res.status(400).json({ error: 'Valid YouTube URL required' })
@@ -307,10 +330,12 @@ router.post('/', rateLimit, async (req, res) => {
     return res.status(400).json({ error: 'Topic is too long' })
   }
 
+  const debateFormat: DebateFormat = format === 'bp' ? 'bp' : 'apda'
   const validResume = resumeFrom === 'transcript' || resumeFrom === 'diarize' || resumeFrom === 'flow' || resumeFrom === 'judge' ? resumeFrom : undefined
-  const paradigmId = paradigm || BUILTIN_PARADIGMS[0].id
 
-  // Validate paradigm exists
+  const defaultParadigm = BUILTIN_PARADIGMS.find((p) => p.format === debateFormat) ?? BUILTIN_PARADIGMS[0]
+  const paradigmId = paradigm || defaultParadigm.id
+
   const builtinExists = BUILTIN_PARADIGMS.some((p) => p.id === paradigmId)
   const customExists = !builtinExists && getCustomParadigm(paradigmId) !== null
   if (!builtinExists && !customExists) {
@@ -337,6 +362,7 @@ router.post('/', rateLimit, async (req, res) => {
     url,
     topic: topic ?? '',
     videoId,
+    format: debateFormat,
     paradigmId,
     transcript: null,
     flow: null,
@@ -347,12 +373,12 @@ router.post('/', rateLimit, async (req, res) => {
   }
   jobs.set(id, job)
 
-  console.log(`[pipeline:${id}] Started for video ${videoId}${validResume ? ` (resume from ${validResume})` : ''}`)
+  console.log(`[pipeline:${id}] Started for video ${videoId} (format: ${debateFormat})${validResume ? ` (resume from ${validResume})` : ''}`)
   runPipeline(job, topic || undefined, validResume as ResumeFrom | undefined).catch((err) => {
     console.error(`[pipeline:${id}] Unhandled error:`, err)
   })
 
-  res.status(202).json({ id, status: job.status })
+  res.status(202).json({ id, status: job.status, format: job.format })
 })
 
 router.get('/:id', requireClientId, (req, res) => {
@@ -366,6 +392,7 @@ router.get('/:id', requireClientId, (req, res) => {
   const response: Record<string, unknown> = {
     id: job.id,
     status: job.status,
+    format: job.format,
     errorStep: job.errorStep,
     error: job.error,
   }

@@ -199,6 +199,7 @@ export async function generateFlowSheet(segments: SpeakerSegment[]): Promise<Flo
   console.log(`[flow] Clustering ${speechArgs.reduce((n, s) => n + s.args.length, 0)} args into clashes`)
   try {
     const flowSheet = await clusterIntoClashes(speechArgs)
+    flowSheet.format = 'apda'
     console.log(`[flow] Generated ${flowSheet.clashes.length} clashes in ${Date.now() - startMs}ms total`)
     return flowSheet
   } catch (err) {

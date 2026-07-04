@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
-import { listParadigms, createParadigm, deleteParadigm, type ParadigmList } from '../api/client'
+import { listParadigms, createParadigm, deleteParadigm, type ParadigmList, type DebateFormat } from '../api/client'
 import './ParadigmSelector.css'
 
 interface ParadigmSelectorProps {
   selected: string
   onSelect: (id: string) => void
+  format: DebateFormat
 }
 
-export function ParadigmSelector({ selected, onSelect }: ParadigmSelectorProps) {
+export function ParadigmSelector({ selected, onSelect, format }: ParadigmSelectorProps) {
   const [paradigms, setParadigms] = useState<ParadigmList>({ builtin: [], custom: [] })
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -25,6 +26,7 @@ export function ParadigmSelector({ selected, onSelect }: ParadigmSelectorProps) 
   }, [])
 
   const allParadigms = [...paradigms.builtin, ...paradigms.custom]
+  const filteredParadigms = allParadigms.filter((p) => p.format === format)
   const selectedParadigm = allParadigms.find((p) => p.id === selected)
 
   const startCustom = () => {
@@ -110,7 +112,7 @@ export function ParadigmSelector({ selected, onSelect }: ParadigmSelectorProps) 
             }
           }}
         >
-          {allParadigms.map((p) => (
+          {filteredParadigms.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}{p.isBuiltin ? '' : ' (custom)'}
             </option>

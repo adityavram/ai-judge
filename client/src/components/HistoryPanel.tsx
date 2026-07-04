@@ -5,36 +5,37 @@
  */
 
 import { useState, useEffect } from 'react'
-import { listCachedRounds, getCachedRound, type CachedRoundSummary } from '../api/client'
-import type { Transcript, FlowSheet, JudgingResult } from '../api/client'
+import { listCachedRounds, getCachedRound, type CachedRoundSummary, type DebateFormat } from '../api/client'
+import type { Transcript, AnyFlowSheet, AnyJudgingResult } from '../api/client'
 import './HistoryPanel.css'
 
 interface HistoryPanelProps {
-  onSelect: (videoId: string, topic: string, transcript: Transcript | null, flow: FlowSheet | null, judging: JudgingResult | null) => void
+  onSelect: (videoId: string, topic: string, transcript: Transcript | null, flow: AnyFlowSheet | null, judging: AnyJudgingResult | null, format?: DebateFormat) => void
   paradigmId: string
+  format: DebateFormat
 }
 
-export function HistoryPanel({ onSelect, paradigmId }: HistoryPanelProps) {
+export function HistoryPanel({ onSelect, paradigmId, format }: HistoryPanelProps) {
   const [rounds, setRounds] = useState<CachedRoundSummary[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (open && rounds.length === 0) {
+    if (open) {
       setLoading(true)
       listCachedRounds()
         .then(setRounds)
         .catch(() => setRounds([]))
         .finally(() => setLoading(false))
     }
-  }, [open])
+  }, [open, format])
 
-  const handleSelect = async (videoId: string) => {
+  const handleSelect = async (videoId: string, roundFormat: DebateFormat) => {
     setLoading(true)
     try {
-      const detail = await getCachedRound(videoId, paradigmId)
+      const detail = await getCachedRound(videoId, paradigmId, roundFormat)
       if (detail) {
-        onSelect(videoId, detail.topic, detail.transcript, detail.flow, detail.judging)
+        onSelect(videoId, detail.topic, detail.transcript, detail.flow, detail.judging, detail.format)
         setOpen(false)
       }
     } finally {
@@ -50,6 +51,10 @@ export function HistoryPanel({ onSelect, paradigmId }: HistoryPanelProps) {
     }
   }
 
+  const formatLabel = (f: string) => f === 'bp' ? 'British Parliamentary' : 'American Parliamentary'
+
+  const filteredRounds = rounds.filter((r) => r.format === format)
+
   return (
     <div className="history-panel">
       <button className="history-toggle" onClick={() => setOpen(!open)}>
@@ -58,12 +63,12 @@ export function HistoryPanel({ onSelect, paradigmId }: HistoryPanelProps) {
       {open && (
         <div className="history-dropdown">
           {loading && rounds.length === 0 && <div className="history-empty">Loading...</div>}
-          {!loading && rounds.length === 0 && <div className="history-empty">No cached rounds yet</div>}
-          {rounds.map((round) => (
+          {!loading && filteredRounds.length === 0 && <div className="history-empty">No {formatLabel(format)} rounds yet</div>}
+          {filteredRounds.map((round) => (
             <button
               key={round.videoId}
               className="history-item"
-              onClick={() => handleSelect(round.videoId)}
+              onClick={() => handleSelect(round.videoId, round.format)}
               disabled={loading}
             >
               <div className="history-topic">{round.topic}</div>

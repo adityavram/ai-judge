@@ -1,0 +1,254 @@
+.bp-flow-view {
+  width: 100%;
+  text-align: left;
+}
+
+.bp-flow-view h2 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  color: var(--text-h);
+}
+
+.bp-speeches-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bp-speech-card {
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  background: var(--code-bg);
+}
+
+.bp-speech-card.bp-team-og {
+  border-left: 4px solid #4a90d9;
+}
+
+.bp-speech-card.bp-team-oo {
+  border-left: 4px solid #d9534f;
+}
+
+.bp-speech-card.bp-team-cg {
+  border-left: 4px solid #5bc0de;
+}
+
+.bp-speech-card.bp-team-co {
+  border-left: 4px solid #f0ad4e;
+}
+
+.bp-speech-header {
+  margin-bottom: 10px;
+}
+
+.bp-speech-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bp-speech-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.bp-team-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.bp-team-badge-og {
+  background: #4a90d9;
+  color: #fff;
+}
+
+.bp-team-badge-oo {
+  background: #d9534f;
+  color: #fff;
+}
+
+.bp-team-badge-cg {
+  background: #5bc0de;
+  color: #1a3a4a;
+}
+
+.bp-team-badge-co {
+  background: #f0ad4e;
+  color: #3a2a0a;
+}
+
+.bp-side-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.bp-side-government {
+  background: rgba(74, 144, 217, 0.15);
+  color: #4a90d9;
+}
+
+.bp-side-opposition {
+  background: rgba(217, 83, 79, 0.15);
+  color: #d9534f;
+}
+
+.bp-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.bp-badge-extension {
+  background: rgba(91, 192, 222, 0.2);
+  color: #2a8a9e;
+}
+
+.bp-badge-header {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.bp-badge-whip-warning {
+  background: rgba(240, 173, 78, 0.2);
+  color: #b07830;
+  margin-top: 4px;
+}
+
+.bp-knife-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: rgba(217, 83, 79, 0.1);
+  border: 1px solid rgba(217, 83, 79, 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #d9534f;
+  font-weight: 600;
+}
+
+.bp-knife-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.bp-knife-explanation {
+  margin-top: 4px;
+  font-weight: 400;
+  color: var(--text-h);
+  font-size: 12px;
+}
+
+.bp-whip-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: 10px;
+  background: rgba(240, 173, 78, 0.1);
+  border: 1px solid rgba(240, 173, 78, 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #b07830;
+  font-weight: 600;
+}
+
+.bp-whip-icon {
+  flex-shrink: 0;
+}
+
+.bp-extension-summary {
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: rgba(91, 192, 222, 0.08);
+  border-left: 3px solid #5bc0de;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-h);
+  line-height: 1.5;
+}
+
+.bp-args-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bp-arg {
+  padding: 8px 10px;
+  background: var(--bg, #fff);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.bp-arg-tag {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text-h);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+}
+
+.bp-arg-text {
+  font-size: 12px;
+  color: var(--text-h);
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.bp-arg-component {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.bp-comp-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+  min-width: 55px;
+}
+
+.bp-comp-text {
+  color: var(--text-h);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.bp-responds-to {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  margin-top: 4px;
+  font-style: italic;
+}
+
+@media (min-width: 900px) {
+  .bp-speeches-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .bp-speeches-grid {
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+  }
+}

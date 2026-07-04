@@ -15,6 +15,7 @@ export interface Paradigm {
   description: string
   prompt: string
   isBuiltin: boolean
+  format: 'apda' | 'bp'
 }
 
 export const BUILTIN_PARADIGMS: Paradigm[] = [
@@ -23,6 +24,7 @@ export const BUILTIN_PARADIGMS: Paradigm[] = [
     name: 'Tech over Truth',
     description: 'Arguments stand as true unless directly answered. Dropping an argument concedes it. Under-substantiated is not a valid reason to discount unanswered args.',
     isBuiltin: true,
+    format: 'apda',
     prompt: `APDA follows TECH OVER TRUTH: an argument made in a constructive speech (PMC, LOC, MG, MO) is treated as TRUE in later speeches unless it is directly answered by the opposing team. This means:
 - If PMC makes a claim with ANY warrant, it is true in PMR unless LOC/MO answers it — even if the warrant is thin.
 - If LOC makes a claim with any warrant, it is true in LOR unless PMC/MG answers it — even if the warrant is thin.
@@ -43,6 +45,7 @@ CRITICAL — INDEPENDENT OFFENSE:
     name: 'Truth over Tech',
     description: 'Arguments must be genuinely persuasive and well-warranted to win. A thin link that was "dropped" still doesn\'t win if the impact is implausible. Warrant quality and real-world truth matter.',
     isBuiltin: true,
+    format: 'apda',
     prompt: `This round is judged under TRUTH OVER TECH: arguments must be genuinely persuasive and well-warranted to carry weight. Technical drops alone do not win rounds. This means:
 - An argument with a weak or implausible warrant does NOT automatically win just because the other side didn't respond. A dropped argument only wins if it had a legitimate warrant and a believable impact.
 - Judges should evaluate whether arguments are actually TRUE or plausible, not just whether they were technically conceded.
@@ -62,6 +65,7 @@ CRITICAL — ARGUMENT QUALITY:
     name: 'Persuasion / Lay Judge',
     description: 'Judge as an intelligent layperson — clarity, narrative, and framing matter more than technical drops. Which side was more convincing to a reasonable person?',
     isBuiltin: true,
+    format: 'apda',
     prompt: `This round is judged as a LAY JUDGE: evaluate which side was more PERSUASIVE to a reasonable, intelligent person with no debate expertise. Technical arguments that would only make sense to a trained debater should not decide the round. This means:
 - CLARITY AND NARRATIVE: Which side told a more coherent, compelling story? A clear, well-structured narrative beats a scattered collection of technical points.
 - FRAMING: Which side better framed the debate — made the judge understand WHY their side matters? Good framing beats technical responses.
@@ -71,6 +75,62 @@ CRITICAL — ARGUMENT QUALITY:
 - REAL-WORLD TRUTH: Plausibility matters. Arguments that stretch credulity or rely on extreme hypotheticals are less persuasive than grounded, realistic ones.
 - REPLY SPEECHES: PMR and LOR should crystallize the round — clearly identifying the 2-3 most important arguments and why their side wins. The best crystallization often decides lay-judged rounds.
 - STYLE: Clear speaking, good organization, and confident delivery matter. Confused or disorganized speeches lose persuasiveness regardless of their content.`,
+  },
+  // ── BP Paradigms ──
+  {
+    id: 'bp-comparative',
+    name: 'Comparative / Relative Contribution',
+    description: 'Standard WUDC judging. Rank teams by their relative contribution to the debate — who moved the debate forward most? Extensions and differentiation from opening matter.',
+    isBuiltin: true,
+    format: 'bp',
+    prompt: `This round is judged under COMPARATIVE / RELATIVE CONTRIBUTION (standard WUDC judging). You are ranking 4 teams (OG, OO, CG, CO) based on their RELATIVE CONTRIBUTION to the debate. This means:
+
+RANKING CRITERIA:
+- Which team contributed most to advancing the debate? This includes introducing new arguments, providing important rebuttal, and offering unique weighing.
+- A team that introduces a novel, important argument that nobody else makes may rank higher than a team that only responds to others' arguments.
+- Opening teams (OG, OO) get credit for setting up the debate. Closing teams (CG, CO) must EXTEND — bring genuinely new, distinct material that differentiates them from their opening.
+
+EXTENSIONS (CRITICAL):
+- CG must extend from OG's case with NEW material. If CG only rebuts or re-explains OG's arguments, CG likely ranks below OG.
+- CO must extend from OO's case with NEW material. If CO only rebuts or re-explains OO's arguments, CO likely ranks below OO.
+- An extension can be vertical (deeper analysis of the same argument) or horizontal (a new argument entirely). It must be CLEARLY DIFFERENT from what the opening team said.
+
+KNIFING:
+- CG cannot contradict OG's case. CO cannot contradict OO's case. This is called "knifing."
+- Minor or soft knifing — where a closing team takes a slightly different angle that doesn't undermine the opening's core case — is common and often forgiven.
+- Direct contradictions that undermine the opening's central thesis should be penalized, but do not automatically drop a team to 4th. Consider the severity and the rest of their contribution.
+
+WHIP SPEECHES:
+- GW and OW are crystallization speeches. They may NOT introduce new arguments.
+- If a whip makes a new argument, it should be discounted.
+- Whips should weigh, summarize, and identify the most important clashes.
+
+TEAM COMPARISON:
+- You must compare ALL FOUR TEAMS against each other, not just opening vs. closing on each bench.
+- It is common for one bench (e.g., Government) to take both 1st and 4th place.
+- The ranking is about RELATIVE contribution, not which "side" won.`,
+  },
+  {
+    id: 'bp-persuasion',
+    name: 'Persuasion / Lay Judge (BP)',
+    description: 'Judge as an intelligent layperson. Which team was most convincing? Clarity, narrative, and framing beat technical drops. No debate jargon needed.',
+    isBuiltin: true,
+    format: 'bp',
+    prompt: `This round is judged as a LAY JUDGE in BP format: evaluate which of the 4 teams was most PERSUASIVE to a reasonable, intelligent person with no debate expertise. Technical arguments that would only make sense to a trained debater should not decide the ranking. This means:
+
+CLARITY AND NARRATIVE: Which team told the most coherent, compelling story? A clear narrative beats scattered technical points.
+FRAMING: Which team best explained WHY their arguments matter? Good framing beats technical responses.
+ACCESSIBILITY: Arguments should be understandable without debate jargon.
+NO DEBATE JARGON: Do not use terms like "extension," "knifing," "POI," "constructive" unless explaining them plainly.
+WEIGHING: Which team best explained why their arguments matter MORE than the others? Comparative weighing is the most persuasive tool.
+
+TEAM COMPARISON:
+- Rank all 4 teams based on which was most convincing overall.
+- Consider: which team would a reasonable person agree with most? Which team made the most sense?
+- Extensions matter only insofar as they make a team's position more convincing — not as a technical requirement.
+- If a closing team contradicts their opening team, that can be confusing and unpersuasive — but minor knifing is common and often forgiven. Penalize based on how much it actually undermines the opening's case.
+
+STYLE: Clear speaking, good organization, confident delivery. Disorganized or unclear speeches lose persuasiveness.`,
   },
 ]
 

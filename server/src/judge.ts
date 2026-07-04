@@ -583,6 +583,7 @@ export async function judgeRound(flow: FlowSheet, topic: string, paradigmPrompt:
   console.log(`[judge] Complete. Winner: ${provisionalWinner}. Total: ${Date.now() - startMs}ms`)
 
   return {
+    format: 'apda' as const,
     winner: provisionalWinner,
     topic,
     weighing,

@@ -40,6 +40,7 @@ export interface SpeakerSegment {
 
 export interface Transcript {
   videoId: string
+  format: DebateFormat
   segments: SpeakerSegment[]
   rawSegments: { text: string; start: number; duration: number }[]
   segmentationConfidence: 'high' | 'low'
@@ -67,6 +68,7 @@ export interface FlowClash {
 }
 
 export interface FlowSheet {
+  format: 'apda'
   clashes: FlowClash[]
 }
 
@@ -134,6 +136,103 @@ export interface JudgingResult {
   oppositionTeam: TeamFeedback
 }
 
+// ── BP Types ──
+
+export type DebateFormat = 'apda' | 'bp'
+
+export const BP_SPEECHES = [
+  { label: 'PM', team: 'OG', side: 'Government' },
+  { label: 'LO', team: 'OO', side: 'Opposition' },
+  { label: 'DPM', team: 'OG', side: 'Government' },
+  { label: 'DLO', team: 'OO', side: 'Opposition' },
+  { label: 'MG', team: 'CG', side: 'Government' },
+  { label: 'MO', team: 'CO', side: 'Opposition' },
+  { label: 'GW', team: 'CG', side: 'Government' },
+  { label: 'OW', team: 'CO', side: 'Opposition' },
+] as const
+
+export interface BPFlowArg {
+  tag: string
+  text: string
+  components: FlowComponent[]
+  isExtension?: boolean
+  isNewInWhip?: boolean
+  respondsTo?: string
+}
+
+export interface BPFlowEntry {
+  speech: string
+  team: string
+  side: string
+  args: BPFlowArg[]
+  isExtension?: boolean
+  extensionSummary?: string
+  knifeDetected?: boolean
+  knifeExplanation?: string
+}
+
+export interface BPFlowSheet {
+  format: 'bp'
+  entries: BPFlowEntry[]
+}
+
+export interface BPExtensionAnalysis {
+  team: string
+  hasExtension: boolean
+  extensionSummary: string
+  differentiatedFromOpening: boolean
+  knifeDetected: boolean
+  knifeExplanation?: string
+}
+
+export interface BPTeamRanking {
+  team: string
+  rank: 1 | 2 | 3 | 4
+  reasoning: string
+}
+
+export interface BPDevilsAdvocatePosition {
+  label: string
+  team: string
+  argument: string
+  whyItCouldWin: string
+}
+
+export interface BPSpeakerScore {
+  speech: string
+  speaker: string
+  team: string
+  side: string
+  score: number
+  rank: number
+  warrant: string
+  impact: string
+  weighing: string
+  engagement: string
+  argumentQuality: string
+  justification: string
+}
+
+export interface BPRFDSection {
+  topHalfSummary: string
+  topHalfWinner: string
+  topHalfReasoning: string
+  closingGovernment: string
+  closingOpposition: string
+  finalRankingJustification: string
+}
+
+export interface BPJudgingResult {
+  format: 'bp'
+  topic: string
+  rankings: BPTeamRanking[]
+  extensionAnalysis: BPExtensionAnalysis[]
+  rfd: BPRFDSection
+  devilsAdvocatePositions: BPDevilsAdvocatePosition[]
+  speakerScores: BPSpeakerScore[]
+  teams: Record<string, TeamFeedback>
+}
+
 export type PipelineStatus = 'transcript' | 'diarize' | 'flow' | 'judge' | 'done' | 'error'
 
 export interface Paradigm {
@@ -142,6 +241,7 @@ export interface Paradigm {
   description: string
   prompt: string
   isBuiltin: boolean
+  format: 'apda' | 'bp'
 }
 
 export interface ParadigmList {
@@ -149,23 +249,27 @@ export interface ParadigmList {
   custom: Paradigm[]
 }
 
+export type AnyFlowSheet = FlowSheet | BPFlowSheet
+export type AnyJudgingResult = JudgingResult | BPJudgingResult
+
 export interface PipelineState {
   id: string
   status: PipelineStatus
+  format: DebateFormat
   transcript: Transcript | null
-  flow: FlowSheet | null
-  judging: JudgingResult | null
+  flow: AnyFlowSheet | null
+  judging: AnyJudgingResult | null
   errorStep: string | null
   error: string | null
 }
 
 const MAX_POLL_RETRIES = 3
 
-export async function startPipeline(url: string, topic?: string, resumeFrom?: 'transcript' | 'diarize' | 'flow' | 'judge', paradigm?: string): Promise<string> {
+export async function startPipeline(url: string, topic?: string, resumeFrom?: 'transcript' | 'diarize' | 'flow' | 'judge', paradigm?: string, format?: DebateFormat): Promise<string> {
   const res = await fetch(`${API_BASE}/api/pipeline`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ url, topic, resumeFrom, paradigm }),
+    body: JSON.stringify({ url, topic, resumeFrom, paradigm, format: format ?? 'apda' }),
   })
   if (res.status === 429) throw new Error('Daily round limit reached. Please try again tomorrow.')
   if (res.status === 400) {
@@ -176,7 +280,7 @@ export async function startPipeline(url: string, topic?: string, resumeFrom?: 't
     const text = await res.text().catch(() => '')
     throw new Error(`Failed to start pipeline: HTTP ${res.status} ${text}`)
   }
-  const data = await res.json() as { id: string; status: string }
+  const data = await res.json() as { id: string; status: string; format: DebateFormat }
   return data.id
 }
 
@@ -249,6 +353,7 @@ export async function submitFeedback(message: string, rating?: number, videoUrl?
 export interface CachedRoundSummary {
   videoId: string
   topic: string
+  format: DebateFormat
   hasTranscript: boolean
   hasFlow: boolean
   hasJudge: boolean
@@ -297,6 +402,7 @@ export async function deleteParadigm(id: string): Promise<void> {
 export interface CachedRoundDetail {
   videoId: string
   topic: string
+  format: DebateFormat
   topicInferred: boolean
   hasTranscript: boolean
   hasRawTranscript: boolean
@@ -304,13 +410,16 @@ export interface CachedRoundDetail {
   hasJudge: boolean
   createdAt: string
   transcript: Transcript | null
-  flow: FlowSheet | null
-  judging: JudgingResult | null
+  flow: AnyFlowSheet | null
+  judging: AnyJudgingResult | null
 }
 
-export async function getCachedRound(videoId: string, paradigmId?: string): Promise<CachedRoundDetail | null> {
-  const params = paradigmId ? `?paradigm=${encodeURIComponent(paradigmId)}` : ''
-  const res = await fetch(`${API_BASE}/api/cache/rounds/${videoId}${params}`, {
+export async function getCachedRound(videoId: string, paradigmId?: string, format?: DebateFormat): Promise<CachedRoundDetail | null> {
+  const params = new URLSearchParams()
+  if (paradigmId) params.set('paradigm', paradigmId)
+  if (format) params.set('format', format)
+  const qs = params.toString()
+  const res = await fetch(`${API_BASE}/api/cache/rounds/${videoId}${qs ? `?${qs}` : ''}`, {
     headers: authHeaders(),
   })
   if (res.status === 404) return null

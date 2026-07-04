@@ -2,7 +2,7 @@
  * Cache inspection and round history endpoints.
  *
  * Public:
- *   GET /api/cache/rounds       — list all cached rounds (video ID, topic, what's available)
+ *   GET /api/cache/rounds       — list all cached rounds (video ID, topic, format, what's available)
  *   GET /api/cache/rounds/:id   — load a full cached round (transcript + flow + judging)
  *
  * Admin (requires Bearer ADMIN_KEY):
@@ -43,16 +43,18 @@ router.get('/rounds', (_req, res) => {
 router.get('/rounds/:videoId', (req, res) => {
   const videoId = req.params.videoId
   const paradigmId = (req.query.paradigm as string) || 'tech-over-truth'
-  const transcript = getCachedTranscript(videoId)
+  const format = (req.query.format as string) || 'apda'
+  const transcript = getCachedTranscript(videoId, format)
   if (!transcript) return res.status(404).json({ error: 'Not found' })
 
-  const flow = getCachedFlow(videoId, transcript.topic)
-  const judge = getCachedJudge(videoId, transcript.topic, paradigmId)
+  const flow = getCachedFlow(videoId, transcript.topic, format)
+  const judge = getCachedJudge(videoId, transcript.topic, paradigmId, format)
   const rawTranscript = getCachedRawTranscript(videoId)
 
   const response: Record<string, unknown> = {
     videoId: transcript.video_id,
     topic: transcript.topic,
+    format: transcript.format || 'apda',
     topicInferred: transcript.topic_inferred === 1,
     hasTranscript: true,
     hasRawTranscript: rawTranscript !== null,
@@ -63,6 +65,7 @@ router.get('/rounds/:videoId', (req, res) => {
 
   response.transcript = {
     videoId: transcript.video_id,
+    format: transcript.format || 'apda',
     rawSegments: JSON.parse(transcript.raw_segments),
     segments: JSON.parse(transcript.segments),
     segmentationConfidence: transcript.confidence,
@@ -81,10 +84,12 @@ router.get('/rounds/:videoId', (req, res) => {
 router.get('/transcript/:videoId', (req, res) => {
   if (!requireAdmin(req, res, () => {})) return
   const videoId = req.params.videoId
-  const cached = getCachedTranscript(videoId)
+  const format = (req.query.format as string) || 'apda'
+  const cached = getCachedTranscript(videoId, format)
   if (!cached) return res.status(404).json({ error: 'Not found' })
   res.json({
     video_id: cached.video_id,
+    format: cached.format || 'apda',
     topic: cached.topic,
     topic_inferred: cached.topic_inferred === 1,
     confidence: cached.confidence,
@@ -99,12 +104,14 @@ router.get('/flow/:videoId', (req, res) => {
   if (!requireAdmin(req, res, () => {})) return
   const { videoId } = req.params
   const topic = req.query.topic as string | undefined
+  const format = (req.query.format as string) || 'apda'
   if (!topic) return res.status(400).json({ error: 'topic query parameter required' })
-  const cached = getCachedFlow(videoId, topic)
+  const cached = getCachedFlow(videoId, topic, format)
   if (!cached) return res.status(404).json({ error: 'Not found' })
   res.json({
     video_id: cached.video_id,
     topic: cached.topic,
+    format: cached.format || 'apda',
     flow: JSON.parse(cached.flow),
     created_at: cached.created_at,
   })
@@ -115,13 +122,15 @@ router.get('/judge/:videoId', (req, res) => {
   const { videoId } = req.params
   const topic = req.query.topic as string | undefined
   const paradigmId = (req.query.paradigm as string) || 'tech-over-truth'
+  const format = (req.query.format as string) || 'apda'
   if (!topic) return res.status(400).json({ error: 'topic query parameter required' })
-  const cached = getCachedJudge(videoId, topic, paradigmId)
+  const cached = getCachedJudge(videoId, topic, paradigmId, format)
   if (!cached) return res.status(404).json({ error: 'Not found' })
   res.json({
     video_id: cached.video_id,
     topic: cached.topic,
     paradigm_id: cached.paradigm_id,
+    format: cached.format || 'apda',
     result: JSON.parse(cached.result),
     created_at: cached.created_at,
   })

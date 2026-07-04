@@ -1,17 +1,20 @@
 /**
- * URL input form with optional topic field.
+ * URL input form with optional topic field and format toggle (APDA/BP).
  * Submits to App.runPipeline which starts the async pipeline.
  */
 
 import { useState } from 'react'
+import type { DebateFormat } from '../api/client'
 import './UrlInput.css'
 
 interface UrlInputProps {
   onSubmit: (url: string, topic: string) => void
   loading: boolean
+  format: DebateFormat
+  onFormatChange: (format: DebateFormat) => void
 }
 
-export function UrlInput({ onSubmit, loading }: UrlInputProps) {
+export function UrlInput({ onSubmit, loading, format, onFormatChange }: UrlInputProps) {
   const [url, setUrl] = useState('')
   const [topic, setTopic] = useState('')
 
@@ -22,6 +25,24 @@ export function UrlInput({ onSubmit, loading }: UrlInputProps) {
 
   return (
     <form className="url-input" onSubmit={handleSubmit}>
+      <div className="format-buttons">
+        <button
+          type="button"
+          className={`format-btn ${format === 'apda' ? 'active' : ''}`}
+          onClick={() => onFormatChange('apda')}
+          disabled={loading}
+        >
+          American Parliamentary
+        </button>
+        <button
+          type="button"
+          className={`format-btn ${format === 'bp' ? 'active' : ''}`}
+          onClick={() => onFormatChange('bp')}
+          disabled={loading}
+        >
+          British Parliamentary
+        </button>
+      </div>
       <input
         type="text"
         value={url}
@@ -34,7 +55,7 @@ export function UrlInput({ onSubmit, loading }: UrlInputProps) {
         type="text"
         value={topic}
         onChange={(e) => setTopic(e.target.value)}
-        placeholder="Debate topic (optional — will be inferred)"
+        placeholder={format === 'bp' ? 'Debate motion (optional — will be inferred)' : 'Debate topic (optional — will be inferred)'}
         disabled={loading}
       />
       <button type="submit" disabled={loading || !url.trim()}>

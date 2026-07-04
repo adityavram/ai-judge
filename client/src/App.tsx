@@ -2,10 +2,11 @@
  * Main application component for AI Judge.
  *
  * Manages the pipeline lifecycle:
- * - User enters a YouTube URL + optional topic → starts async pipeline
+ * - User enters a YouTube URL + optional topic + format (APDA/BP) → starts async pipeline
  * - Polls for progress, progressively renders transcript → flow → judging
  * - Supports re-running from any step via resumeFrom (Re-judge, Regenerate Flow, etc.)
  * - History panel loads cached rounds instantly from server cache
+ * - Format toggle switches between APDA (2-team) and BP (4-team) views
  */
 
 import { useState } from 'react'
@@ -14,12 +15,14 @@ import { Collapsible } from './components/Collapsible'
 import { ProgressPipeline, type PipelineStep } from './components/ProgressPipeline'
 import { TranscriptView } from './components/TranscriptView'
 import { FlowView } from './components/FlowView'
+import { FlowViewBP } from './components/FlowViewBP'
 import { JudgeView } from './components/JudgeView'
+import { JudgeViewBP } from './components/JudgeViewBP'
 import { FeedbackButton } from './components/FeedbackButton'
 import { HistoryPanel } from './components/HistoryPanel'
 import { ParadigmSelector } from './components/ParadigmSelector'
-import { startPipeline, pollPipeline, submitFeedback, type PipelineState } from './api/client'
-import type { Transcript, FlowSheet, JudgingResult } from './api/client'
+import { startPipeline, pollPipeline, submitFeedback, type PipelineState, type DebateFormat } from './api/client'
+import type { Transcript, AnyFlowSheet, AnyJudgingResult, FlowSheet, BPFlowSheet, JudgingResult, BPJudgingResult } from './api/client'
 import './App.css'
 
 function friendlyError(state: PipelineState): string {
@@ -65,12 +68,20 @@ function friendlyError(state: PipelineState): string {
 
 function App() {
   const [pipelineStep, setPipelineStep] = useState<PipelineStep>('idle')
+  const [format, setFormat] = useState<DebateFormat>('apda')
   const [transcript, setTranscript] = useState<Transcript | null>(null)
-  const [flow, setFlow] = useState<FlowSheet | null>(null)
-  const [judging, setJudging] = useState<JudgingResult | null>(null)
+  const [flow, setFlow] = useState<AnyFlowSheet | null>(null)
+  const [judging, setJudging] = useState<AnyJudgingResult | null>(null)
   const [errors, setErrors] = useState<{ step: string; message: string }[]>([])
   const [lastUrl, setLastUrl] = useState('')
   const [selectedParadigm, setSelectedParadigm] = useState<string>('tech-over-truth')
+
+  const handleFormatChange = (newFormat: DebateFormat) => {
+    setFormat(newFormat)
+    const defaultParadigm = newFormat === 'bp' ? 'bp-comparative' : 'tech-over-truth'
+    setSelectedParadigm(defaultParadigm)
+    if (pipelineStep === 'idle') return
+  }
 
   const runPipeline = async (url: string, topic: string, resumeFrom?: 'transcript' | 'diarize' | 'flow' | 'judge') => {
     setLastUrl(url)
@@ -103,7 +114,7 @@ function App() {
     }
 
     try {
-      const jobId = await startPipeline(url, topic || undefined, resumeFrom, selectedParadigm)
+      const jobId = await startPipeline(url, topic || undefined, resumeFrom, selectedParadigm, format)
 
       while (true) {
         const state = await pollPipeline(jobId)
@@ -118,6 +129,7 @@ function App() {
           setPipelineStep('error')
         }
 
+        if (state.format) setFormat(state.format)
         if (state.transcript) setTranscript(state.transcript)
         if (state.flow) setFlow(state.flow)
         if (state.judging) setJudging(state.judging)
@@ -139,9 +151,10 @@ function App() {
     await submitFeedback(message, rating || undefined, lastUrl || undefined)
   }
 
-  const handleCachedRound = (_videoId: string, _topic: string, cachedTranscript: Transcript | null, cachedFlow: FlowSheet | null, cachedJudging: JudgingResult | null) => {
+  const handleCachedRound = (_videoId: string, _topic: string, cachedTranscript: Transcript | null, cachedFlow: AnyFlowSheet | null, cachedJudging: AnyJudgingResult | null, cachedFormat?: DebateFormat) => {
     setLastUrl(`https://youtube.com/watch?v=${_videoId}`)
     setPipelineStep('done')
+    if (cachedFormat) setFormat(cachedFormat)
     setTranscript(cachedTranscript)
     setFlow(cachedFlow)
     setJudging(cachedJudging)
@@ -150,20 +163,26 @@ function App() {
 
   const busy = pipelineStep !== 'idle' && pipelineStep !== 'done' && pipelineStep !== 'error'
 
+  const isBP = format === 'bp'
+  const apdaFlow = !isBP && flow ? flow as FlowSheet : null
+  const bpFlow = isBP && flow ? flow as BPFlowSheet : null
+  const apdaJudging = !isBP && judging ? judging as JudgingResult : null
+  const bpJudging = isBP && judging ? judging as BPJudgingResult : null
+
   return (
     <div className="app">
       <FeedbackButton onSubmit={handleFeedback} />
-        <HistoryPanel onSelect={handleCachedRound} paradigmId={selectedParadigm} />
+        <HistoryPanel onSelect={handleCachedRound} paradigmId={selectedParadigm} format={format} />
       <header className="app-header">
         <h1>AI Judge</h1>
         <p>Enter a debate round URL to get an AI-generated decision</p>
       </header>
 
       <main className="app-main">
-        <UrlInput onSubmit={runPipeline} loading={busy} />
+        <UrlInput onSubmit={runPipeline} loading={busy} format={format} onFormatChange={handleFormatChange} />
 
         {pipelineStep === 'idle' && (
-          <ParadigmSelector selected={selectedParadigm} onSelect={setSelectedParadigm} />
+          <ParadigmSelector selected={selectedParadigm} onSelect={setSelectedParadigm} format={format} />
         )}
 
         {pipelineStep !== 'idle' && (
@@ -177,10 +196,10 @@ function App() {
           </div>
         ))}
 
-        {pipelineStep === 'done' && judging && (
+        {pipelineStep === 'done' && apdaJudging && (
           <>
-            <JudgeView result={judging} />
-            <ParadigmSelector selected={selectedParadigm} onSelect={setSelectedParadigm} />
+            <JudgeView result={apdaJudging} />
+            <ParadigmSelector selected={selectedParadigm} onSelect={setSelectedParadigm} format={format} />
             <button
               className="regenerate-btn"
               onClick={() => runPipeline(lastUrl, '', 'judge')}
@@ -192,10 +211,43 @@ function App() {
           </>
         )}
 
-        {flow && pipelineStep !== 'idle' && (
+        {pipelineStep === 'done' && bpJudging && (
           <>
-            <Collapsible title="Flow" badge={`${flow.clashes.length} clashes`} defaultOpen={false}>
-              <FlowView flow={flow} />
+            <JudgeViewBP result={bpJudging} />
+            <ParadigmSelector selected={selectedParadigm} onSelect={setSelectedParadigm} format={format} />
+            <button
+              className="regenerate-btn"
+              onClick={() => runPipeline(lastUrl, '', 'judge')}
+              disabled={busy}
+            >
+              Re-judge Round
+            </button>
+            <div className="section-divider" />
+          </>
+        )}
+
+        {apdaFlow && pipelineStep !== 'idle' && (
+          <>
+            <Collapsible title="Flow" badge={`${apdaFlow.clashes.length} clashes`} defaultOpen={false}>
+              <FlowView flow={apdaFlow} />
+            </Collapsible>
+            {pipelineStep === 'done' && (
+              <button
+                className="regenerate-btn"
+                onClick={() => runPipeline(lastUrl, '', 'flow')}
+                disabled={busy}
+              >
+                Regenerate Flow
+              </button>
+            )}
+            <div className="section-divider" />
+          </>
+        )}
+
+        {bpFlow && pipelineStep !== 'idle' && (
+          <>
+            <Collapsible title="Flow" badge={`${bpFlow.entries.length} speeches`} defaultOpen={false}>
+              <FlowViewBP flow={bpFlow} />
             </Collapsible>
             {pipelineStep === 'done' && (
               <button

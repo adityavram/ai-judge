@@ -396,6 +396,16 @@ async function tryFetchTranscript(
     }
   }
 
+  // If any InnerTube client successfully fetched the video but found no captions,
+  // the video genuinely has no captions — don't fall through to HTML scraping
+  // (which can trigger captchas/rate-limits on datacenter IPs).
+  // Some clients may fail with access errors (UNPLAYABLE, ERROR status, HTTP 403)
+  // even when the video exists, so we only need ONE "no captions" signal.
+  if (errors.some((e) => /No capt/i.test(e))) {
+    throw new YouTubeNoTranscriptError(videoId)
+  }
+
+  // If ALL errors are access/playability issues (no "no captions" signal), try HTML
   // Last resort: try HTML page scraping (can trigger captcha on datacenter IPs)
   console.warn('[youtube] All InnerTube contexts failed, trying HTML page scrape...')
   try {
@@ -415,10 +425,6 @@ async function tryFetchTranscript(
   // All methods failed — throw appropriate error
   if (errors.some((e) => /rate.limit|captcha|temporarily|429/i.test(e))) {
     throw new YouTubeRateLimitError()
-  }
-
-  if (errors.every((e) => /No capt/i.test(e))) {
-    throw new YouTubeNoTranscriptError(videoId)
   }
 
   throw new YouTubeTranscriptError(

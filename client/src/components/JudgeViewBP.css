@@ -1,0 +1,136 @@
+.judge-view-bp {
+  width: 100%;
+  text-align: left;
+}
+
+.bp-rankings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+@media (max-width: 768px) {
+  .bp-rankings-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bp-ranking-card {
+  padding: 16px;
+  border-radius: 10px;
+  border-left: 6px solid var(--border);
+}
+
+.bp-ranking-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.bp-ranking-place {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.bp-ranking-team {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.bp-ranking-reasoning {
+  margin: 0;
+  font-size: 13px;
+  line-height: 155%;
+  color: var(--text);
+}
+
+.bp-extension-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .bp-extension-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bp-extension-card {
+  padding: 14px;
+  border-radius: 8px;
+  border-left: 3px solid var(--border);
+  background: var(--code-bg);
+}
+
+.bp-extension-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.bp-extension-team {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.bp-extension-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.badge-yes {
+  background: rgba(34,197,94,0.12);
+  color: #16a34a;
+}
+
+.badge-no {
+  background: rgba(239,68,68,0.1);
+  color: #dc2626;
+}
+
+.bp-extension-summary {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 155%;
+  color: var(--text-h);
+}
+
+.bp-extension-tag {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+.tag-differentiated {
+  background: rgba(6,182,212,0.1);
+  color: #0891b2;
+}
+
+.tag-knife {
+  background: rgba(239,68,68,0.1);
+  color: #dc2626;
+}
+
+.bp-speaks-table td:nth-child(3) {
+  font-weight: 600;
+}
+
+.bp-feedback-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 768px) {
+  .bp-feedback-grid {
+    grid-template-columns: 1fr;
+  }
+}
