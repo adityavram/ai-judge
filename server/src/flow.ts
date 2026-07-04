@@ -1,3 +1,16 @@
+/**
+ * Flow sheet generation for APDA debate rounds.
+ *
+ * Two-pass approach:
+ * 1. Pass 1 (parallel): Extract arguments from each speech independently via LLM,
+ *    producing tagged flow entries with components (LINK, IMPACT, WEIGH, etc.)
+ * 2. Pass 2: Cluster extracted arguments into clash points via LLM,
+ *    plus a "Weighing & Voters" clash for crystallization arguments.
+ *
+ * Emphasizes link/mechanism detail, internal links, and explicit weighing —
+ * the core of APDA tech-over-truth evaluation.
+ */
+
 import type { SpeakerSegment, FlowSheet } from './types.js'
 import { llmJSON, LlmError } from './llm.js'
 

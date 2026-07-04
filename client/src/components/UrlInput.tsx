@@ -1,3 +1,8 @@
+/**
+ * URL input form with optional topic field.
+ * Submits to App.runPipeline which starts the async pipeline.
+ */
+
 import { useState } from 'react'
 import './UrlInput.css'
 

@@ -1,3 +1,8 @@
+/**
+ * 4-step progress indicator: Transcript → Diarize → Flow → Judge
+ * Shows check/spinner/X for each step based on current pipeline status.
+ */
+
 import './ProgressPipeline.css'
 
 export type PipelineStep = 'idle' | 'transcript' | 'diarize' | 'flow' | 'judge' | 'done' | 'error'

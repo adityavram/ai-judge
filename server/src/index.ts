@@ -1,24 +1,27 @@
+/**
+ * AI Judge server entry point.
+ *
+ * Serves the built React client as static files in production,
+ * and provides API routes for the pipeline, feedback, and cache.
+ * All debate processing is handled by the async pipeline at POST /api/pipeline.
+ */
+
 import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { existsSync } from 'fs'
-import transcriptRouter from './routes/transcript.js'
-import flowRouter from './routes/flow.js'
-import judgeRouter from './routes/judge.js'
-import feedbackRouter from './routes/feedback.js'
 import pipelineRouter from './routes/pipeline.js'
+import feedbackRouter from './routes/feedback.js'
 import cacheRouter from './routes/cache.js'
-import { rateLimit, requireClientId } from './rateLimit.js'
 
 // Prevent unhandled rejections from crashing the process
 process.on('unhandledRejection', (reason) => {
   console.error('[server] Unhandled rejection:', reason)
 })
 process.on('uncaughtException', (err) => {
-  console.error('[server] Uncaught exception:', err)
-  // Don't exit — keep the server running
+  console.error('[server] Unhandled exception:', err)
 })
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -35,9 +38,6 @@ app.get('/health', (_req, res) => {
 
 // API routes
 app.use('/api/pipeline', pipelineRouter)
-app.use('/api/transcript', rateLimit, transcriptRouter)
-app.use('/api/flow', requireClientId, flowRouter)
-app.use('/api/judge', requireClientId, judgeRouter)
 app.use('/api/feedback', feedbackRouter)
 app.use('/api/cache', cacheRouter)
 

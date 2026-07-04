@@ -1,3 +1,8 @@
+/**
+ * Generic collapsible section with arrow toggle, optional badge.
+ * Used for Flow, Transcript, and Judge sub-sections.
+ */
+
 import { useState, type ReactNode } from 'react'
 import './Collapsible.css'
 

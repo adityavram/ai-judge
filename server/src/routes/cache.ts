@@ -1,3 +1,16 @@
+/**
+ * Cache inspection and round history endpoints.
+ *
+ * Public:
+ *   GET /api/cache/rounds       — list all cached rounds (video ID, topic, what's available)
+ *   GET /api/cache/rounds/:id   — load a full cached round (transcript + flow + judging)
+ *
+ * Admin (requires Bearer ADMIN_KEY):
+ *   GET /api/cache/transcript/:id  — raw transcript cache
+ *   GET /api/cache/flow/:id?topic= — flow cache
+ *   GET /api/cache/judge/:id?topic= — judge cache
+ */
+
 import { Router } from 'express'
 import { getCachedTranscript, getCachedFlow, getCachedJudge, getCachedRawTranscript, listCachedRounds } from '../db.js'
 

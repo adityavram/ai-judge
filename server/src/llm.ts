@@ -1,3 +1,13 @@
+/**
+ * LLM client wrapper for Ollama-compatible chat completions.
+ *
+ * - Supports structured JSON output via `llmJSON()` which extracts JSON from
+ *   markdown code fences and surrounding text
+ * - Retries on rate limits (429) with exponential backoff and server-suggested delays
+ * - Classifies errors into user-friendly categories (rate_limit, token_exhausted, timeout, etc.)
+ * - Timeout of 180s per request (LLM calls can be slow for large contexts)
+ */
+
 const LLM_BASE = process.env.LLM_BASE ?? 'https://ollama.com'
 const LLM_API_KEY = process.env.LLM_API_KEY ?? ''
 const LLM_MODEL = process.env.LLM_MODEL ?? 'gpt-oss:120b'

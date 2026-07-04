@@ -1,3 +1,17 @@
+/**
+ * SQLite database layer using better-sqlite3.
+ *
+ * Tables:
+ * - feedback: user feedback submissions
+ * - raw_transcript_cache: YouTube captions before diarization (enables re-segment without re-fetch)
+ * - transcript_cache: diarized transcripts keyed by video_id
+ * - flow_cache: generated flow sheets keyed by (video_id, topic)
+ * - judge_cache: judging results keyed by (video_id, topic)
+ *
+ * The raw_transcript_cache is separate from transcript_cache so that
+ * re-segmenting (resumeFrom=diarize) can skip the YouTube fetch entirely.
+ */
+
 import Database from 'better-sqlite3'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'

@@ -1,7 +1,30 @@
+/**
+ * Async pipeline orchestration for the AI Judge.
+ *
+ * POST /api/pipeline — starts a new pipeline job, returns 202 with job ID
+ * GET  /api/pipeline/:id — polls job status (transcript → diarize → flow → judge → done)
+ *
+ * Pipeline steps:
+ * 1. Transcript: Fetch raw captions from YouTube (or raw_transcript_cache)
+ * 2. Diarize: Segment captions into speaker-labeled speech blocks
+ * 3. Flow: Extract arguments and cluster into clashes
+ * 4. Judge: Weighing, clash verdicts, RFD, devil's advocate, speaker scores, feedback
+ *
+ * Resume/re-run via `resumeFrom` parameter:
+ * - 'transcript': re-fetch from YouTube, re-diarize, re-flow, re-judge
+ * - 'diarize':    skip YouTube fetch (use raw_transcript_cache), re-diarize, re-flow, re-judge
+ * - 'flow':       skip to flow generation (use transcript_cache), re-judge
+ * - 'judge':      skip to judging (use flow_cache)
+ *
+ * Jobs are stored in-memory with a 30-min TTL and 200-job cap.
+ * Intermediate results (transcript, flow) appear in poll responses as they complete,
+ * enabling progressive rendering on the client.
+ */
+
 import { Router } from 'express'
 import { randomUUID } from 'crypto'
-import { extractVideoId, assignSpeakers } from '../diarization.js'
-import { fetchYouTubeTranscript, YouTubeRateLimitError, YouTubeNoTranscriptError } from '../youtube.js'
+import { extractVideoId, fetchYouTubeTranscript, YouTubeRateLimitError, YouTubeNoTranscriptError } from '../youtube.js'
+import { assignSpeakers } from '../diarization.js'
 import { generateFlowSheet } from '../flow.js'
 import { judgeRound } from '../judge.js'
 import { llmChat, LlmError, llmErrorToResponse } from '../llm.js'

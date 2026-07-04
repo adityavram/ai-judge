@@ -1,3 +1,20 @@
+/**
+ * Speech diarization for APDA debate transcripts.
+ *
+ * Takes raw YouTube caption segments and splits them into 6 speaker-labeled
+ * speech blocks (PMC, LOC, MG, MO, LOR, PMR) following APDA debate format.
+ *
+ * Algorithm:
+ * 1. Find natural pause gaps in captions to identify speech boundaries
+ * 2. Score and optimize split points to match expected APDA speech durations
+ * 3. Enforce per-position max durations (constructives up to 12-15 min, replies up to 7 min)
+ * 4. Use LLM to validate/assign speech role labels (PMC, LOC, etc.)
+ * 5. Trim pleasantries and intros from speech boundaries via LLM
+ * 6. Merge blocks that are too short for their position, skip non-debate content
+ *
+ * Falls back to deterministic position-based assignment if LLM fails.
+ */
+
 import type { CaptionSegment, SpeakerSegment } from './types.js'
 import { llmJSON, LlmError } from './llm.js'
 
@@ -572,18 +589,4 @@ export async function assignSpeakers(captions: CaptionSegment[], topic?: string)
   return { segments, confidence, detectedSpeechCount: blocks.length }
 }
 
-function extractVideoId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=)([\w-]{11})/,
-    /(?:youtu\.be\/)([\w-]{11})/,
-    /(?:youtube\.com\/embed\/)([\w-]{11})/,
-    /(?:youtube\.com\/shorts\/)([\w-]{11})/,
-  ]
-  for (const pattern of patterns) {
-    const match = url.match(pattern)
-    if (match) return match[1]
-  }
-  return null
-}
-
-export { extractVideoId, APDA_SPEECHES, APDA_EXPECTED_SPEECHES }
+export { APDA_SPEECHES, APDA_EXPECTED_SPEECHES }

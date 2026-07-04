@@ -1,3 +1,8 @@
+/**
+ * Floating feedback button that opens a modal with star rating + text area.
+ * Submits to POST /api/feedback.
+ */
+
 import { useState } from 'react'
 import './FeedbackButton.css'
 

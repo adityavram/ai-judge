@@ -1,3 +1,10 @@
+/**
+ * Renders the full judging decision:
+ * - Winner banner (Gov=blue, Opp=red)
+ * - RFD (weighing, comparison, why winner won, link-by-link)
+ * - Collapsible sections: Speaker Scores, Weighing, Clash Verdicts, Devil's Advocate, Feedback
+ */
+
 import type { JudgingResult } from '../api/client'
 import { Collapsible } from './Collapsible'
 import './JudgeView.css'

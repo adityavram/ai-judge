@@ -1,3 +1,16 @@
+/**
+ * API client for the AI Judge pipeline.
+ *
+ * Main flow:
+ * 1. startPipeline(url, topic?, resumeFrom?) → POST /api/pipeline → job ID
+ * 2. pollPipeline(jobId) → GET /api/pipeline/:id → loop until done/error
+ * 3. Progressive results: transcript/flow/judging appear as each step completes
+ *
+ * Also provides:
+ * - submitFeedback() — POST /api/feedback
+ * - listCachedRounds() / getCachedRound() — GET /api/cache/rounds for history
+ */
+
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 
 const CLIENT_ID_KEY = 'ai-judge-client-id'

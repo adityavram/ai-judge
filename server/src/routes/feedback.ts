@@ -1,3 +1,10 @@
+/**
+ * User feedback submission endpoint.
+ *
+ * POST /api/feedback — saves feedback (message + optional rating + video URL)
+ * GET  /api/feedback — admin-only list of feedback (requires Bearer ADMIN_KEY)
+ */
+
 import { Router } from 'express'
 import { saveFeedback, getFeedback, getFeedbackCount } from '../db.js'
 import { requireClientId } from '../rateLimit.js'

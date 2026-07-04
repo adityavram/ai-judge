@@ -1,3 +1,12 @@
+/**
+ * Shared type definitions for the AI Judge pipeline.
+ *
+ * Data flows through the pipeline as:
+ *   CaptionSegment[] → SpeakerSegment[] (diarization)
+ *   SpeakerSegment[] → FlowSheet (flow generation)
+ *   FlowSheet → JudgingResult (judging)
+ */
+
 export interface CaptionSegment {
   text: string
   start: number

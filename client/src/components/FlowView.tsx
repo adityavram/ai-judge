@@ -1,3 +1,8 @@
+/**
+ * Renders the flow sheet as a table: rows = clashes, columns = APDA speeches (PMC→PMR).
+ * Each cell shows the tagged arguments with their components.
+ */
+
 import type { FlowSheet } from '../api/client'
 import './FlowView.css'
 

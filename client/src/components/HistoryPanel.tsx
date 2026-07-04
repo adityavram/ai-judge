@@ -1,3 +1,9 @@
+/**
+ * Dropdown panel that lists cached rounds from the server.
+ * Clicking a round instantly loads transcript/flow/judging from cache
+ * without re-running the pipeline.
+ */
+
 import { useState, useEffect } from 'react'
 import { listCachedRounds, getCachedRound, type CachedRoundSummary } from '../api/client'
 import type { Transcript, FlowSheet, JudgingResult } from '../api/client'

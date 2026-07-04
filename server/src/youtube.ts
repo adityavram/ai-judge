@@ -5,10 +5,11 @@
  * 1. Try InnerTube API with multiple client contexts (no captcha risk)
  * 2. If all InnerTube contexts fail, try HTML page scraping as last resort
  * 3. If HTML scraping returns a captcha page, throw a clear rate-limit error
+ * 4. Retry with exponential backoff on transient failures
  *
- * The original youtube-transcript npm package worked this way, but its
- * captcha error was too cryptic. We handle it gracefully with retries and
- * clear messaging.
+ * The InnerTube API returns caption track URLs that we fetch and parse as XML.
+ * Each client context (ANDROID, TV, WEB_EMBEDDED, IOS, MWEB) may have different
+ * access levels — some bypass age restrictions, some have captions where others don't.
  */
 
 const INNERTUBE_API_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false'

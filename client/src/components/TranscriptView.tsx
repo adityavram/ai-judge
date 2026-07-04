@@ -1,3 +1,9 @@
+/**
+ * Renders the diarized transcript: speaker-labeled segments with timestamps.
+ * Shows topic (with inferred badge if auto-detected) and confidence warning
+ * if segmentation found != 6 speech blocks.
+ */
+
 import type { Transcript } from '../api/client'
 import './TranscriptView.css'
 

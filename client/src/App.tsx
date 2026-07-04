@@ -1,3 +1,13 @@
+/**
+ * Main application component for AI Judge.
+ *
+ * Manages the pipeline lifecycle:
+ * - User enters a YouTube URL + optional topic → starts async pipeline
+ * - Polls for progress, progressively renders transcript → flow → judging
+ * - Supports re-running from any step via resumeFrom (Re-judge, Regenerate Flow, etc.)
+ * - History panel loads cached rounds instantly from server cache
+ */
+
 import { useState } from 'react'
 import { UrlInput } from './components/UrlInput'
 import { Collapsible } from './components/Collapsible'

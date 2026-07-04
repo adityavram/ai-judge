@@ -1,3 +1,22 @@
+/**
+ * APDA debate round judging pipeline.
+ *
+ * 6-step parallel judging process:
+ * 1. Weighing analysis — identify 2-4 key issues and overall framework
+ * 2. Per-clash evaluation — parallel LLM calls, one per clash point
+ * 3. Provisional winner — deterministic: side with more clash wins
+ * 4. RFD + Devil's advocate — parallel LLM calls for structured decision and alternate paths
+ * 5. Speaker scores — parallel LLM calls per debater (4 debaters, ranks reconciled)
+ * 6. Per-team feedback — strengths, weaknesses, improvements
+ *
+ * APDA-specific rules enforced:
+ * - Tech over truth: unanswered arguments stand as true
+ * - MO/MG independent offense: new arguments are valid in constructive speeches
+ * - PMR/LOR new arguments flagged and penalized, not credited
+ * - No low-point wins: losing team total must be ≤ winning team
+ * - Speaker scale calibrated: 25 average, 22-24 below avg, 29-32 excellent
+ */
+
 import type { FlowSheet, JudgingResult, WeighingAnalysis, ClashVerdict, DevilsAdvocatePosition, SpeakerScore, TeamFeedback, RFDSection, FlowClash } from './types.js'
 import { llmJSON } from './llm.js'
 import { readFileSync } from 'fs'
