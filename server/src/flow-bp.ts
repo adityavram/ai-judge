@@ -238,14 +238,23 @@ async function checkKnifing(
 ): Promise<{ knifeDetected: boolean; knifeExplanation?: string }> {
   const system = `You are a BP debate knifing detector. In BP, "knifing" occurs when a closing team directly contradicts their opening team's case.
 
-IMPORTANT: Minor or "soft" knifing — where a closing team takes a slightly different angle, reframes an argument, or makes a minor departure that doesn't undermine the opening's core case — is common in BP and often forgiven. Only flag as knifing if the closing team DIRECTLY CONTRADICTS or UNDERCUTS the opening team's central thesis.
+CRITICAL DISTINCTION — Reframing is NOT knifing:
+In BP, closing teams are EXPECTED to reframe the debate, take a different angle, or argue that the opening team's framing misses something. This is a legitimate extension technique, NOT knifing. Examples of legitimate reframing that should NOT be flagged:
+- Arguing that the opening team's positive claim actually has negative consequences (e.g., OG says "more parties improves representation" and CG says "more parties causes alienation" — this is reframing, not knifing)
+- Taking the opening's premise in a new direction (e.g., OG argues for representation benefits, CG extends with democratic backsliding risks — this is extending, not contradicting)
+- Offering a more nuanced or conditional version of the opening's argument
+- Adding new arguments that interact differently with the opposition's case
 
-Given a closing team's arguments and their opening team's arguments, determine if the closing team is knifing (contradicting) the opening team.
+Only flag as knifing if the closing team DIRECTLY CONTRADICTS the opening team's core thesis in a way that makes the opening's case impossible to sustain. For example:
+- OG argues "policy X is good" and CG argues "policy X is bad" — this is knifing
+- OG argues "more parties improve democracy" and CG argues "more parties cause alienation" — this is NOT knifing, it's reframing from a different angle
+
+Given a closing team's arguments and their opening team's arguments, determine if the closing team is knifing (directly contradicting) the opening team.
 
 Respond with ONLY valid JSON:
 {
   "knifeDetected": true/false,
-  "knifeExplanation": "If knifing detected, explain how they contradict and whether it undermines the opening's core case or is just a minor reframing. If not, explain why there's no contradiction."
+  "knifeExplanation": "If knifing detected, explain the direct contradiction. If not, explain why the closing team's arguments are consistent with or reframing the opening's case."
 }`
 
   const user = `### Closing Team (${closingEntry.team}, ${closingEntry.speech}) Arguments

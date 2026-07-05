@@ -95,9 +95,11 @@ EXTENSIONS (CRITICAL):
 - CG must extend from OG's case with NEW material. If CG only rebuts or re-explains OG's arguments, CG likely ranks below OG.
 - CO must extend from OO's case with NEW material. If CO only rebuts or re-explains OO's arguments, CO likely ranks below OO.
 - An extension can be vertical (deeper analysis of the same argument) or horizontal (a new argument entirely). It must be CLEARLY DIFFERENT from what the opening team said.
+- A strong extension that proves bigger impacts than the opening team's case SHOULD outrank that opening team. Being an opening team is not a ranking advantage — only impacts matter.
 
 KNIFING:
-- CG cannot contradict OG's case. CO cannot contradict OO's case. This is called "knifing."
+- Knifing is when a closing team DIRECTLY CONTRADICTS their opening team's core thesis. This should be penalized.
+- Reframing is NOT knifing. If CG argues the same phenomenon has negative consequences that OG presented as positive, that is a legitimate extension — CG is reframing from a new angle, not contradicting OG's case.
 - Minor or soft knifing — where a closing team takes a slightly different angle that doesn't undermine the opening's core case — is common and often forgiven.
 - Direct contradictions that undermine the opening's central thesis should be penalized, but do not automatically drop a team to 4th. Consider the severity and the rest of their contribution.
 

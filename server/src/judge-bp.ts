@@ -50,7 +50,8 @@ const BP_PARADIGM_CONTEXT = `BRITISH PARLIAMENTARY RULES — These are always tr
 - There is no "low-point wins" rule in the traditional sense, but speaker points serve as a sanity check: teams ranked higher should generally have better combined speaker points
 - Relative comparison between ALL FOUR teams is essential — this is not a binary win/loss
 - Ranking is determined by PAIRWISE IMPACT WEIGHING: compare teams head-to-head on each key issue. The team that proves the larger, more probable, or more important impact wins that clash. Having an extension does NOT automatically outrank an opening team — CG must prove their extension has bigger impacts than OO's case, and vice versa for all pairwise matchups
-- Opening teams (OG, OO) often present the most germane arguments to the motion — their arguments are first-principled and directly responsive to the topic. Do not overcredit closing teams just because they do explicit "weighing" or "framing" — explicit weighing language does not make an impact bigger. What matters is whether the impact IS bigger, not whether a debater says it is`
+- Opening teams (OG, OO) often present the most germane arguments to the motion — their arguments are first-principled and directly responsive to the topic. Do not overcredit closing teams just because they do explicit "weighing" or "framing" — explicit weighing language does not make an impact bigger. What matters is whether the impact IS bigger, not whether a debater says it is
+- Conversely, do not overcredit opening teams for being first. If a closing team's extension proves genuinely bigger, more probable, or more important impacts, the closing team should rank above that opening team. Position in the debate does not determine impact strength — the actual content of the arguments does`
 
 function bpFlowToText(flow: BPFlowSheet): string {
   return flow.entries
@@ -158,12 +159,16 @@ ${paradigmPrompt}
 
 In BP, closing teams (CG and CO) MUST extend from their opening team's case. An extension is new, distinctive material that adds value beyond what the opening team established. A closing team that simply repeats or re-explains their opening's arguments has NOT extended.
 
-KNIFING occurs when a closing team contradicts or undercuts their opening team's arguments. This is heavily penalized.
+IMPORTANT — Knifing vs. Reframing:
+Knifing is when a closing team DIRECTLY CONTRADICTS their opening team's core thesis, making it impossible for both to be true simultaneously. This should be penalized.
+Reframing is when a closing team takes the opening's premise in a new direction, adds a different angle, or argues that the opening's positive claim has negative consequences. This is NOT knifing — it is a legitimate extension technique.
+Example: OG argues "more parties improves representation." CG argues "more parties causes alienation and democratic backsliding." This is NOT knifing — CG is reframing the same phenomenon from a negative angle, which is proper extension.
+Example: OG argues "policy X is good." CG argues "policy X is bad." This IS knifing — they directly contradict the opening's core thesis.
 
 For each closing team, analyze:
 1. Did they extend? What was their extension?
 2. Did the extension genuinely differentiate from the opening team?
-3. Did they knife (contradict) their opening team? How? Note: minor or soft knifing — where a closing team takes a slightly different angle that doesn't undermine the opening's core case — is common and often forgiven. Only flag as knifing if the closing team directly contradicts or undercuts the opening's central thesis.
+3. Did they knife (directly contradict) their opening team? Or did they reframe the opening's argument from a new angle (which is legitimate)?
 
 Respond with ONLY valid JSON:
 {
@@ -174,7 +179,7 @@ Respond with ONLY valid JSON:
       "extensionSummary": "2-3 sentences describing the extension (or why there isn't one)",
       "differentiatedFromOpening": true/false,
       "knifeDetected": true/false,
-      "knifeExplanation": "If knifing detected, explain how they contradicted their opening and whether it undermines the opening's core case or is a minor soft knife. If no knifing, explain why they are consistent."
+      "knifeExplanation": "If knifing detected, explain the direct contradiction. If not knifing, explain why their arguments are consistent with or reframing the opening's case."
     }
   ]
 }`
@@ -225,10 +230,13 @@ Rank all 4 teams (OG, OO, CG, CO) from 1st (best) to 4th (worst) based on their 
 CRITICAL — PAIRWISE IMPACT WEIGHING:
 Rankings are determined by comparing teams head-to-head on the key issues of the round. For each clash, ask: which team proved the bigger impact? Which team's mechanisms are stronger and more probable? The team that wins the most important clashes on impact weighing ranks higher.
 
-IMPORTANT: Having an extension does NOT automatically mean a closing team outranks an opening team. CG's extension must be weighed against OO's case — if OO proved bigger impacts on the key issues, OO ranks above CG regardless of whether CG extended. Similarly, CO must win their clashes against OG's case to rank above OG.
+Having an extension does NOT automatically mean a closing team outranks an opening team. CG's extension must be weighed against OO's case — if OO proved bigger impacts on the key issues, OO ranks above CG regardless of whether CG extended. Similarly, CO must win their clashes against OG's case to rank above OG.
 
-IMPORTANT — DO NOT OVERCREDIT BACKHALF WEIGHING:
-Closing teams (CG, CO) often do explicit "weighing" or "framing" language that sounds impressive but doesn't make their impacts bigger. Opening teams (OG, OO) often present the most germane, first-principled arguments directly responsive to the motion. Evaluate impacts by their actual size, probability, and relevance — not by whether a team explicitly said "we outweigh on scope" or "this is the most important issue in the round." A strong, obvious argument from OG that directly addresses the motion can beat a heavily-weighed but narrower extension from CG.
+DO NOT OVERCREDIT BACKHALF WEIGHING:
+Closing teams (CG, CO) often do explicit "weighing" or "framing" language that sounds impressive but doesn't make their impacts bigger. Opening teams (OG, OO) often present the most germane, first-principled arguments directly responsive to the motion. Evaluate impacts by their actual size, probability, and relevance — not by whether a team explicitly said "we outweigh on scope" or "this is the most important issue in the round."
+
+ALSO DO NOT OVERCREDIT OPENING TEAMS:
+Just as explicit weighing language doesn't make closing teams' impacts bigger, being first to speak doesn't make opening teams' impacts bigger either. If a closing team's extension proves genuinely bigger, more probable, or more important impacts than an opening team's case, the closing team should rank above that opening team — even if the opening's arguments were more "obvious" or "germane." Evaluate each team's impacts on their merits, not on their position in the debate.
 
 IMPORTANT RULES:
 - No ties — each rank must be unique (1, 2, 3, 4)
