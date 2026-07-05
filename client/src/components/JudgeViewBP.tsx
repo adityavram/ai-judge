@@ -21,6 +21,10 @@ export function JudgeViewBP({ result }: JudgeViewBPProps) {
 
   return (
     <div className="judge-view-bp">
+      <div className="bp-experimental-banner">
+        <span className="bp-experimental-icon">&#9888;&#65039;</span>
+        <span>British Parliamentary judging is <strong>experimental</strong> and may produce inaccurate rankings or feedback. Use with caution.</span>
+      </div>
       <div className="bp-rankings-grid">
         {sortedRankings.map((r) => {
           const c = TEAM_COLORS[r.team] ?? TEAM_COLORS.OG
