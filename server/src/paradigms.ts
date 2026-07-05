@@ -109,7 +109,8 @@ WHIP SPEECHES:
 TEAM COMPARISON:
 - You must compare ALL FOUR TEAMS against each other, not just opening vs. closing on each bench.
 - It is common for one bench (e.g., Government) to take both 1st and 4th place.
-- The ranking is about RELATIVE contribution, not which "side" won.`,
+- The ranking is about RELATIVE contribution, not which "side" won.
+- Do NOT overcredit closing teams for explicit "weighing" or "framing" language. Opening teams often present the most germane, first-principled arguments directly responsive to the motion. Evaluate impacts by their actual size, probability, and relevance — not by whether a team explicitly said "we outweigh." A strong opening argument can beat a heavily-weighed but narrower closing extension.`,
   },
   {
     id: 'bp-persuasion',
@@ -129,6 +130,7 @@ TEAM COMPARISON:
 - Rank all 4 teams based on which was most convincing overall.
 - Consider: which team would a reasonable person agree with most? Which team made the most sense?
 - Extensions matter, but a closing team does NOT automatically outrank an opening team just because they extended. The extension must be more persuasive and have bigger impact than the other team's case.
+- Don't overcredit closing teams for jargon like "we outweigh" — opening teams often present the most obvious, intuitive arguments. What matters is what would actually convince a reasonable person.
 - If a closing team contradicts their opening team, that can be confusing and unpersuasive — but minor knifing is common and often forgiven. Penalize based on how much it actually undermines the opening's case.
 
 STYLE: Clear speaking, good organization, confident delivery. Disorganized or unclear speeches lose persuasiveness.`,

@@ -49,7 +49,8 @@ const BP_PARADIGM_CONTEXT = `BRITISH PARLIAMENTARY RULES — These are always tr
 - New arguments in whip speeches should be disregarded and penalized in scoring
 - There is no "low-point wins" rule in the traditional sense, but speaker points serve as a sanity check: teams ranked higher should generally have better combined speaker points
 - Relative comparison between ALL FOUR teams is essential — this is not a binary win/loss
-- Ranking is determined by PAIRWISE IMPACT WEIGHING: compare teams head-to-head on each key issue. The team that proves the larger, more probable, or more important impact wins that clash. Having an extension does NOT automatically outrank an opening team — CG must prove their extension has bigger impacts than OO's case, and vice versa for all pairwise matchups`
+- Ranking is determined by PAIRWISE IMPACT WEIGHING: compare teams head-to-head on each key issue. The team that proves the larger, more probable, or more important impact wins that clash. Having an extension does NOT automatically outrank an opening team — CG must prove their extension has bigger impacts than OO's case, and vice versa for all pairwise matchups
+- Opening teams (OG, OO) often present the most germane arguments to the motion — their arguments are first-principled and directly responsive to the topic. Do not overcredit closing teams just because they do explicit "weighing" or "framing" — explicit weighing language does not make an impact bigger. What matters is whether the impact IS bigger, not whether a debater says it is`
 
 function bpFlowToText(flow: BPFlowSheet): string {
   return flow.entries
@@ -225,6 +226,9 @@ CRITICAL — PAIRWISE IMPACT WEIGHING:
 Rankings are determined by comparing teams head-to-head on the key issues of the round. For each clash, ask: which team proved the bigger impact? Which team's mechanisms are stronger and more probable? The team that wins the most important clashes on impact weighing ranks higher.
 
 IMPORTANT: Having an extension does NOT automatically mean a closing team outranks an opening team. CG's extension must be weighed against OO's case — if OO proved bigger impacts on the key issues, OO ranks above CG regardless of whether CG extended. Similarly, CO must win their clashes against OG's case to rank above OG.
+
+IMPORTANT — DO NOT OVERCREDIT BACKHALF WEIGHING:
+Closing teams (CG, CO) often do explicit "weighing" or "framing" language that sounds impressive but doesn't make their impacts bigger. Opening teams (OG, OO) often present the most germane, first-principled arguments directly responsive to the motion. Evaluate impacts by their actual size, probability, and relevance — not by whether a team explicitly said "we outweigh on scope" or "this is the most important issue in the round." A strong, obvious argument from OG that directly addresses the motion can beat a heavily-weighed but narrower extension from CG.
 
 IMPORTANT RULES:
 - No ties — each rank must be unique (1, 2, 3, 4)
@@ -457,6 +461,14 @@ PRACTICAL CALIBRATION:
 - 85-89 is outstanding — near-perfect execution.
 - 90+ is exceptional — debate-changing, rare.
 
+IMPORTANT — SPEAKER SCORES MUST CORRELATE WITH TEAM PLACEMENT:
+In BP, speaker scores are a sanity check on rankings. The combined speaker scores of each team MUST correlate with their placement:
+- The 1st-place team's combined speaker scores must be the highest among all 4 teams.
+- The 2nd-place team's combined scores must be the second-highest.
+- The 3rd-place team's combined scores must be the third-highest.
+- The 4th-place team's combined scores must be the lowest.
+If your scores would violate this correlation, adjust them accordingly. Individual debaters within a team may vary, but the team totals must match the ranking order.
+
 You are scoring: ${debaterName} (${team}/${side}), who gave these speeches: ${speeches.join(', ')}.
 This debater's team (${team}) is ranked ${teamRank} out of 4.
 
@@ -532,10 +544,10 @@ async function assignSpeaks(
   )
 
   const allScores = results.flat()
-  return fixupBPRanks(allScores)
+  return fixupBPRanks(allScores, rankings)
 }
 
-function fixupBPRanks(scores: BPSpeakerScore[]): BPSpeakerScore[] {
+function fixupBPRanks(scores: BPSpeakerScore[], rankings: BPTeamRanking[]): BPSpeakerScore[] {
   if (scores.length !== 8) return scores
 
   const debaterBestScore = new Map<string, number>()
@@ -555,7 +567,10 @@ function fixupBPRanks(scores: BPSpeakerScore[]): BPSpeakerScore[] {
   const sortedRanks = [...uniqueRanks].sort((a, b) => a - b)
   const isValid = sortedRanks.length === 8 && sortedRanks.every((r, i) => r === i + 1)
 
-  if (isValid) return scores
+  if (isValid) {
+    // Ranks are valid — still enforce team score correlation
+    return enforceTeamScoreCorrelation(scores, rankings)
+  }
 
   console.warn(`[judge-bp] Fixing invalid ranks: reassigning by score`)
   const sortedDebaters = [...debaterBestScore.entries()].sort((a, b) => b[1] - a[1])
@@ -567,6 +582,79 @@ function fixupBPRanks(scores: BPSpeakerScore[]): BPSpeakerScore[] {
 
   for (const s of scores) {
     s.rank = newRanks.get(s.speaker) ?? s.rank
+  }
+
+  return enforceTeamScoreCorrelation(scores, rankings)
+}
+
+/**
+ * Enforce WUDC rule: combined speaker scores must correlate with team placement.
+ * 1st place = highest combined speaks, 2nd = second highest, etc.
+ * Adjusts scores upward/downward to match the ranking order.
+ */
+function enforceTeamScoreCorrelation(scores: BPSpeakerScore[], rankings: BPTeamRanking[]): BPSpeakerScore[] {
+  const sortedRankings = [...rankings].sort((a, b) => a.rank - b.rank)
+
+  // Calculate combined score per team
+  const teamCombined = new Map<string, number>()
+  for (const s of scores) {
+    teamCombined.set(s.team, (teamCombined.get(s.team) ?? 0) + s.score)
+  }
+
+  // Check if correlation already holds
+  const teamRankOrder = sortedRankings.map((r) => r.team)
+  const sortedByScore = [...teamCombined.entries()].sort((a, b) => b[1] - a[1])
+  const scoreOrder = sortedByScore.map((e) => e[0])
+
+  const alreadyCorrelated = teamRankOrder.every((team, i) => scoreOrder[i] === team)
+  if (alreadyCorrelated) return scores
+
+  console.warn(`[judge-bp] Fixing speaker score correlation: rank order ${teamRankOrder.join(',')} but score order ${scoreOrder.join(',')}`)
+
+  // Calculate gaps between teams' combined scores
+  const targetOrder = teamRankOrder
+  const currentSums = targetOrder.map((team) => teamCombined.get(team) ?? 150)
+  const avgSum = currentSums.reduce((a, b) => a + b, 0) / currentSums.length
+
+  // Redistribute: ensure each team's combined score respects rank order
+  // Use 3-point gaps between adjacent ranks as baseline, centered around average
+  const baseScore = avgSum - 4.5 // center the distribution
+  for (let i = 0; i < targetOrder.length; i++) {
+    const targetCombined = baseScore + (targetOrder.length - i) * 3
+    const currentCombined = teamCombined.get(targetOrder[i]) ?? 150
+    const diff = targetCombined - currentCombined
+
+    // Distribute the adjustment proportionally across the team's speakers
+    const teamScores = scores.filter((s) => s.team === targetOrder[i])
+    const teamTotalCurrent = teamScores.reduce((sum, s) => sum + s.score, 0)
+    for (const s of teamScores) {
+      if (teamTotalCurrent > 0) {
+        s.score = Math.round(Math.min(100, Math.max(50, s.score + (diff * s.score / teamTotalCurrent))))
+      }
+    }
+  }
+
+  // Recalculate combined scores after adjustment
+  const newTeamCombined = new Map<string, number>()
+  for (const s of scores) {
+    newTeamCombined.set(s.team, (newTeamCombined.get(s.team) ?? 0) + s.score)
+  }
+
+  // Verify correlation holds; if still off due to rounding, nudge
+  const newScoreOrder = [...newTeamCombined.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0])
+  if (!teamRankOrder.every((team, i) => newScoreOrder[i] === team)) {
+    // Last resort: add 1 to each speaker on higher-ranked teams until order is correct
+    for (let i = 0; i < teamRankOrder.length - 1; i++) {
+      const upperTeam = teamRankOrder[i]
+      const lowerTeam = teamRankOrder[i + 1]
+      let upperSum = scores.filter((s) => s.team === upperTeam).reduce((sum, s) => sum + s.score, 0)
+      let lowerSum = scores.filter((s) => s.team === lowerTeam).reduce((sum, s) => sum + s.score, 0)
+      while (upperSum <= lowerSum) {
+        for (const s of scores) {
+          if (s.team === upperTeam) { s.score++; upperSum++ }
+        }
+      }
+    }
   }
 
   return scores
