@@ -120,3 +120,4 @@ ai-judge/
 ## License
 
 MIT
+<!-- NOTE: This repo is tracked by PR Evaluator Hub for review orchestration. -->
